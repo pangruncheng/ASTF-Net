@@ -43,6 +43,8 @@ setup(
         "omegaconf>=2.3.0",
         "speechbrain",
         "pytorch-lightning",
+        "aim==3.17.0",
+        "sqlalchemy==1.4.1",
     ],
     extras_require={
         "dev": [
@@ -57,13 +59,13 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "astf-train=astf.cli.train:main",
-            "astf-predict=astf.cli.predict:main",
+            "train=astfnet.cli.train:main",
+            "predict=astfnet.cli.predict:main",
         ],
     },
     include_package_data=True,
     package_data={
-        "astf": ["configs/*.yaml", "configs/*.json"],
+        "astfnet": ["configs/*.yaml", "configs/*.json"],
     },
     zip_safe=False,
 )
