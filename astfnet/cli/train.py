@@ -1,7 +1,7 @@
 import argparse
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
-from astfnet.data.datamodule import SeismicDataModule
+from astfnet.data_io.datamodule import SeismicDataModule
 from astfnet.models.cnn import PLSimpleCNN
 from aim.pytorch_lightning import AimLogger
 

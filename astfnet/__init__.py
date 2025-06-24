@@ -9,13 +9,13 @@ __version__ = "0.1.0"
 __author__ = "ASTF-net Team"
 __email__ = "your.email@example.com"
 
-from . import data
+from . import data_io
 # from . import models
 # from . import utils
 # from . import training
 
 __all__ = [
-    "data",
+    "data_io",
     #     "models",
     #     "utils",
     #     "training",
