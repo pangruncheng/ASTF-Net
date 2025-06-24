@@ -1,5 +1,5 @@
 import torch
-from astf.models.cnn import PLSimpleCNN
+from astfnet.models.cnn import PLSimpleCNN
 
 import pytest
 

@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import h5py
 from torch.utils.data import DataLoader
-from astf.data.dataset import SeismicDatasetHDF5
-from astf.data.datamodule import SeismicDataModule
+from astfnet.data.dataset import SeismicDatasetHDF5
+from astfnet.data.datamodule import SeismicDataModule
 
 
 @pytest.fixture

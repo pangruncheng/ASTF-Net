@@ -1,8 +1,8 @@
 import argparse
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
-from astf.data.datamodule import SeismicDataModule
-from astf.models import PLSimpleCNN
+from astfnet.data.datamodule import SeismicDataModule
+from astfnet.models.cnn import PLSimpleCNN
 
 
 def main():
