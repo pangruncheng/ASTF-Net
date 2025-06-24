@@ -1,0 +1,31 @@
+default_language_version:
+  python: python3.10
+
+repos:
+  # pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # ruff linter
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: ruff linter
+        entry: ruff check
+        language: python
+        types: [python]
+        args: [--fix]
+
+  # ruff formatter
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff formatter
+        entry: ruff format
+        language: python
+        types: [python]
