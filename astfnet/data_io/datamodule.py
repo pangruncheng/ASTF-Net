@@ -23,9 +23,7 @@ class SeismicDataModule(pl.LightningDataModule):
             )
             self.val_dataset = SeismicDatasetHDF5(self.val_hdf5_file)
         if stage == "test" or stage is None:
-            self.test_dataset = SeismicDatasetHDF5(
-                self.test_hdf5_file, self.augmentation_params
-            )
+            self.test_dataset = SeismicDatasetHDF5(self.test_hdf5_file)
 
     def train_dataloader(self):
         return DataLoader(
