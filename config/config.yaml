@@ -1,0 +1,23 @@
+# ASTF-net training configuration
+
+# Dataset and dataloader
+train_hdf5_file: "downloads/Test_level1_pairs_2_Samezero_501_new_3_1.h5"
+val_hdf5_file: "downloads/Test_level1_pairs_2_Samezero_501_new_3_1.h5"
+test_hdf5_file: "downloads/Test_level1_pairs_2_Samezero_501_new_3_1.h5"
+batch_size: 32
+num_workers: 4
+
+# Data augmentations (SpeechBrain style)
+data_augmentations:
+  - AddNoise:
+      snr_low: 10
+      snr_high: 20
+  - DropChunk:
+      drop_length_low: 5
+      drop_length_high: 10
+
+# Model hyperparameters
+in_channels: 2
+output_length: 501
+lr: 0.001
+max_epochs: 2
