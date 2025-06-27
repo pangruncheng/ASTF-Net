@@ -1,0 +1,64 @@
+
+[build-system]
+requires = ["setuptools>=80.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astf-net"
+version = "0.0.1"
+description = "A deep learning framework for apparent seismic source time function inversion."
+readme = "README.md"
+requires-python = "==3.12.10"
+dependencies = [
+    "comet_ml",
+    "gitpython",
+    "matplotlib",
+    "numpy",
+    "omegaconf",
+    "optuna",
+    "pandas",
+    "pip",
+    "pytorch_lightning",
+    "scipy",
+    "scikit-learn",
+    "torch==2.7.0",
+    "tqdm",
+    "speechbrain>=1.0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+    "pytest",
+    "ruff",
+    "ty",
+]
+docs = [
+    "sphinx",
+]
+
+[project.scripts]
+astfnet-train="astfnet.cli.train:main"
+astfnet-pred="astfnet.cli.predict:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["astfnet"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["ANN", "D", "F", "I"]
+ignore = ["D100", "D104"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.pytest.ini_options]
+addopts = "-p no:warnings"
