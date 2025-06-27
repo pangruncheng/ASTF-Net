@@ -48,3 +48,18 @@ Test
 ```bash
 pytest tests/
 ```
+### Usage
+Installing the application with uv sync exposes the following CLI entry points:
+```
+astfnet-train               # train a model
+astfnet-pred                # making predictions
+```
+The entry points can be called directly. For example:
+```bash
+astfnet-train --config config/config.yaml
+```
+
+More information on the usage and the options available for these entry points can be obtained by calling the --help option. For example:
+```bash
+astfnet-train --help
+```
