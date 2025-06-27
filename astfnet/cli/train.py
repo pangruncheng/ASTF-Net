@@ -1,15 +1,16 @@
 import argparse
+
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
+from pytorch_lightning.loggers import TensorBoardLogger
+
 from astfnet.data_io.datamodule import SeismicDataModule
 from astfnet.models.cnn import PLSimpleCNN
-from aim.pytorch_lightning import AimLogger
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Train ASTF-net with PyTorch Lightning."
-    )
+def main() -> None:
+    """Main function to train the ASTF-net model."""
+    parser = argparse.ArgumentParser(description="Train ASTF-net with PyTorch Lightning.")
     parser.add_argument(
         "--config",
         type=str,
@@ -25,18 +26,14 @@ def main():
     datamodule = SeismicDataModule(config)
     model = PLSimpleCNN(config)
 
-    aim_logger = AimLogger(
-        experiment="astfnet-training",
-        train_metric_prefix="train_",
-        val_metric_prefix="val_",
-    )
+    tb_logger = TensorBoardLogger(save_dir=config["output_dir"], name="astfnet-training")
 
     trainer = pl.Trainer(
         max_epochs=max_epochs,
         accelerator="auto",
         default_root_dir="outputs",
         log_every_n_steps=10,
-        logger=aim_logger,
+        logger=tb_logger,
     )
     trainer.fit(model, datamodule=datamodule)
 
