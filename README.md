@@ -44,27 +44,7 @@ Install pre-commit hooks with:
 ```bash
 pre-commit install
 ```
-
-These hooks will be dicussed in the [development tools](#development-tools) section.
-
-Add `scripts/` to `PATH` with:
+Test
 ```bash
-export PATH="$PWD/scripts:$PATH"
+pytest tests/
 ```
-
-#### Notes on interactive shell configuration
-After the installation process, your bash or zsh shell will be ready to use: the `.venv` virtual environment is activated and `scripts/` is in `PATH`. However, when a new shell session is started, this will not be the case anymore. Below are different options to configure a new shell session.
-
-One option is to run these two commands for every new session:
-```bash
-source .venv/bin/activate
-export PATH="$PWD/scripts:$PATH"
-```
-
-Another option is to add the following lines at the end of `~/.bashrc` or `~/.zshrc` to configure new shell sessions automatically.
-```bash
-source /your/path/to/nrcan_mp_mapping/.venv/bin/activate
-export PATH="/your/path/to/nrcan_mp_mapping/scripts:$PATH"
-```
-
-For this change to take effect on the current shell session, run `source ~./bashrc` or `source ~./zshrc`, respectively.
