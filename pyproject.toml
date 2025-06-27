@@ -24,6 +24,8 @@ dependencies = [
     "torch==2.7.0",
     "tqdm",
     "speechbrain>=1.0.3",
+    "h5py>=3.14.0",
+    "obspy>=1.4.2",
 ]
 
 [project.optional-dependencies]
@@ -45,7 +47,7 @@ astfnet-pred="astfnet.cli.predict:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["astfnet"]
+where = ["."]
 
 [tool.ruff]
 line-length = 120
