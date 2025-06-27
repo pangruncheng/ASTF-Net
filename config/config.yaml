@@ -9,12 +9,13 @@ num_workers: 4
 
 # Data augmentations (SpeechBrain style)
 data_augmentations:
-  - AddNoise:
-      snr_low: 10
-      snr_high: 20
-  - DropChunk:
-      drop_length_low: 5
-      drop_length_high: 10
+  - AddRandomNoise:
+      noise_level: 0.5
+  - DropRegion:
+      max_drop_length: 10
+  - AddTrend:
+      min_deg: -2
+      max_deg: 2
 
 # Model hyperparameters
 in_channels: 2
