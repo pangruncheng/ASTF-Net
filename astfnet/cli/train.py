@@ -2,6 +2,7 @@ import argparse
 
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
+from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from astfnet.data_io.datamodule import SeismicDataModule
@@ -25,16 +26,44 @@ def main() -> None:
     max_epochs = config["max_epochs"]
     datamodule = SeismicDataModule(config)
     model = PLSimpleCNN(config)
+    device = config["device"]
+    gpus = config["gpus"]
 
     tb_logger = TensorBoardLogger(save_dir=config["output_dir"], name="astfnet-training")
 
+    # --- Callbacks ---
+    early_stop_callback = EarlyStopping(
+        monitor=config["callbacks"]["early_stopping"]["monitor"],
+        patience=config["callbacks"]["early_stopping"]["patience"],
+        mode=config["callbacks"]["early_stopping"]["mode"],
+        min_delta=config["callbacks"]["early_stopping"]["min_delta"],
+        verbose=config["callbacks"]["early_stopping"]["verbose"],
+    )
+
+    lr_monitor = LearningRateMonitor(logging_interval="epoch")  # Log LR every epoch
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor=config["callbacks"]["model_checkpoint"]["monitor"],
+        mode=config["callbacks"]["model_checkpoint"]["mode"],
+        save_top_k=config["callbacks"]["model_checkpoint"]["save_top_k"],
+        filename=config["callbacks"]["model_checkpoint"]["filename"],
+        # verbose=config["callbacks"]["model_checkpoint"]["verbose"],
+        save_last=True,  # Save the last checkpoint as well
+    )
+
     trainer = pl.Trainer(
         max_epochs=max_epochs,
-        accelerator="auto",
+        accelerator=device,
+        devices=gpus,
+        # strategy=DDPStrategy(find_unused_parameters=False),
         default_root_dir="outputs",
+        # gradient_clip_val=1.0,
         log_every_n_steps=10,
+        # detect_anomaly=True,
         logger=tb_logger,
+        callbacks=[early_stop_callback, lr_monitor, checkpoint_callback],  # ← Add callbacks here
     )
+
     trainer.fit(model, datamodule=datamodule)
 
 

@@ -1,7 +1,10 @@
 import logging
+
 import torch
 
 from astfnet.models.loss_fns import (
+    AmplitudeWeightedMSELoss,
+    ConvAlignLoss,
     EffectiveRegionWeightedMSELoss,
     NonZeroWeightedMSE,
     WeightedMSE,
@@ -31,6 +34,16 @@ def load_loss(
     elif loss_name == "nonzero_weighted_mse":
         logger.info("NonZeroWeightedMSE is loaded as the loss function.")
         loss_fn = NonZeroWeightedMSE()
+    elif loss_name == "amplitude_weighted_mse":
+        logger.info("AmplitudeWeightedMSELoss is loaded as the loss function.")
+        loss_fn = AmplitudeWeightedMSELoss(epsilon=1e-6, a=0.8)
+    elif loss_name == "mse":
+        logger.info("MSELoss is loaded as the loss function.")
+        loss_fn = torch.nn.MSELoss()
+    elif loss_name == "convalignLoss":
+        logger.info("ConvAlignLoss is loaded as the loss function.")
+        alpha = config.get("loss_weight")
+        loss_fn = ConvAlignLoss(alpha=alpha, crop_len=256)
     else:
         raise ValueError("loss {} not supported".format(loss_name))
     return loss_fn

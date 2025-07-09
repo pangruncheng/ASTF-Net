@@ -123,7 +123,7 @@ class AddTrend(nn.Module):
             trend = slope * x
             max_abs = torch.max(torch.abs(waveform[i]))
             if max_abs > 0:
-                trend = trend / torch.max(torch.abs(trend)) * max_abs
+                trend = trend / (torch.max(torch.abs(trend)) + 1e-6) * max_abs
             trended_waveform[i] = waveform[i] + trend
         return trended_waveform
 
