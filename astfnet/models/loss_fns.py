@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.fft
 
 
 class WeightedMSE(nn.Module):
@@ -134,7 +135,6 @@ class AmplitudeWeightedMSELoss(nn.Module):
 
         return loss
 
-
 class ConvAlignLoss(nn.Module):
     """Loss combining ASTF MSE and convolution alignment loss."""
 
@@ -246,3 +246,205 @@ class ConvAlignLoss(nn.Module):
         for i in range(B):
             rolled[i] = torch.roll(x[i], shifts[i].item())
         return rolled
+
+class ConvAlignLoss_amp_mse(nn.Module):
+    """Loss combining amplitude-weighted ASTF MSE and convolution alignment loss."""
+
+    def __init__(self, alpha: float = 1.0, crop_len: int = 256, epsilon: float = 1e-6, a: float = 1.0) -> None:
+        """Initialize the ConvAlignLoss module.
+
+        Args:
+            alpha: Weight for the convolution alignment loss term.
+            crop_len: Length of waveform segment to compare (center cropped).
+        """
+        super().__init__()
+        self.alpha = alpha
+        self.crop_len = crop_len
+        self.amp_mse = AmplitudeWeightedMSELoss(epsilon, a)
+
+    def forward(
+        self,
+        pred_astf: torch.Tensor,
+        true_astf: torch.Tensor,
+        egf: torch.Tensor,
+        target_waveform: torch.Tensor,
+        roll: torch.Tensor = None,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        """Calculate the combined ASTF and convolution alignment loss.
+
+        Args:
+            pred_astf: Predicted ASTF with shape (B, L).
+            true_astf: True ASTF with shape (B, L).
+            egf: EGF with shape (B, L).
+            target_waveform: Target waveform with shape (B, L3).
+            roll: Precomputed shift (alignment) values with shape (B,) or None.
+
+        Returns:
+            A tuple containing:
+                - total_loss: Combined loss value.
+                - Dictionary with individual loss terms ("astf" and "conv").
+        """
+        B, L = pred_astf.shape
+        L_target = target_waveform.shape[1]
+
+        # 1. Amplitude-weighted ASTF loss
+        loss_astf = self.amp_mse(pred_astf, true_astf)
+
+        # 2. Convolution prediction
+        pred_astf_ = pred_astf.unsqueeze(1)  # (B, 1, L)
+        egf_ = egf.unsqueeze(1)              # (B, 1, L)
+        input_reshaped = pred_astf_.transpose(0, 1)  # (1, B, L)
+        weight_reshaped = egf_
+        conv_result = F.conv1d(input_reshaped, weight_reshaped, groups=B)
+        conv_result = conv_result.transpose(0, 1).squeeze(1)  # (B, L_out)
+
+        # 3. Compute alignment shifts
+        if roll is None:
+            conv_len = conv_result.shape[1]
+            target_padded = F.pad(target_waveform, (0, conv_len - L_target))
+            fft_conv = torch.fft.rfft(conv_result, n=2 * conv_len - 1)
+            fft_target = torch.fft.rfft(target_padded, n=2 * conv_len - 1)
+            cc = torch.fft.irfft(fft_conv * torch.conj(fft_target), n=2 * conv_len - 1)
+            shifts = torch.argmax(cc, dim=1) - (conv_len - 1)
+        else:
+            shifts = roll.to(torch.long)
+
+        # 4. Align and center crop
+        conv_aligned = self._batch_roll(conv_result, -shifts)
+        conv_cropped = self._batch_center_crop(conv_aligned, self.crop_len)
+        target_cropped = self._batch_center_crop(target_waveform, self.crop_len)
+
+        # 5. Amplitude-weighted loss for conv vs target
+        loss_conv = self.amp_mse(conv_cropped, target_cropped)
+
+        total_loss = loss_astf + self.alpha * loss_conv
+        return total_loss, {"astf": loss_astf, "conv": loss_conv}
+
+    def _batch_center_crop(self, x: torch.Tensor, crop_len: int) -> torch.Tensor:
+        """Center crop batch data along the last dimension.
+
+        Args:
+            x: Input tensor with shape (B, L).
+            crop_len: Length to crop to.
+
+        Returns:
+            Center-cropped tensor with shape (B, crop_len).
+        """
+        L = x.size(1)
+        start = (L - crop_len) // 2
+        return x[:, start : start + crop_len]
+
+    def _batch_roll(self, x: torch.Tensor, shifts: torch.Tensor) -> torch.Tensor:
+        """Roll each element in batch x by corresponding shift value.
+
+        Args:
+            x: Input tensor with shape (B, L).
+            shifts: Shift values with shape (B,).
+
+        Returns:
+            Rolled tensor with same shape as input.
+        """
+        B, L = x.size()
+        rolled = torch.empty_like(x)
+        for i in range(B):
+            rolled[i] = torch.roll(x[i], shifts[i].item())
+        return rolled
+
+###################AMSELoss####################
+import torch
+import torch.nn as nn
+from torch import Tensor
+
+__all__ = ["AMSELoss"]
+
+
+def _unitary_fft(x: Tensor, dim: int = -1) -> Tensor:
+    """Unitary FFT (norm='ortho') along `dim`."""
+    return torch.fft.fft(x, dim=dim, norm="ortho")
+
+
+def _per_bin_psd_unitary(X: Tensor, N: int) -> Tensor:
+    """Per-bin PSD so that sum_k PSD_k = average power per sample."""
+    return (X.abs() ** 2) / float(N)
+
+
+def _per_bin_cos_phase(X: Tensor, Y: Tensor, eps: float) -> Tensor:
+    """
+    cos(Δφ_k) = Re{X Y*} / (|X||Y| + eps), elementwise over the FFT axis.
+    Returns a real tensor in [-1, 1].
+    """
+    num = torch.real(X * torch.conj(Y))
+    den = X.abs() * Y.abs() + eps
+    cphi = num / den
+    return torch.clamp(cphi, -1.0, 1.0)
+
+
+class AMSELoss(nn.Module):
+    """
+    AMSE loss under unitary DFT.
+
+    AMSE = Σ_k [ (√PSD_x - √PSD_y)^2 + 2*max(PSD_x,PSD_y)*(1 - cosΔφ_k) ]
+
+    Args:
+        fft_dim: FFT transform axis (default: -1)
+        reduction: 'mean' | 'sum' | 'none'
+        eps: small constant for numerical stability
+    """
+
+    def __init__(
+        self,
+        fft_dim: int = -1,
+        reduction: str = "mean",
+        eps: float = 1e-12,
+    ):
+        super().__init__()
+        self.fft_dim = fft_dim
+        self.reduction = reduction
+        self.eps = eps
+
+    def forward(self, pred: Tensor, target: Tensor) -> Tensor:
+        if pred.shape != target.shape:
+            raise ValueError("pred and target must have identical shapes")
+
+        N = pred.size(self.fft_dim)
+        # Unitary FFT
+        X = _unitary_fft(pred, dim=self.fft_dim)
+        Y = _unitary_fft(target, dim=self.fft_dim)
+
+        # Per-bin PSDs
+        PSDx = _per_bin_psd_unitary(X, N)
+        PSDy = _per_bin_psd_unitary(Y, N)
+
+        # cos(Δφ_k)
+        cphi = _per_bin_cos_phase(X, Y, self.eps)
+
+        # Amplitude term
+        term_amp = (torch.sqrt(PSDx + self.eps) - torch.sqrt(PSDy + self.eps)) ** 2
+        # Phase term
+        term_phase = 2.0 * torch.maximum(PSDx, PSDy) * (1.0 - cphi)
+
+        amse_per_example = (term_amp + term_phase).sum(dim=self.fft_dim)
+
+        # Reduction
+        if self.reduction == "mean":
+            return amse_per_example.mean()
+        elif self.reduction == "sum":
+            return amse_per_example.sum()
+        else:
+            return amse_per_example
+
+
+# Optional helpers
+def mse_time(x: Tensor, y: Tensor) -> Tensor:
+    """Time-domain mean squared error."""
+    e = x - y
+    return torch.mean(torch.abs(e) ** 2, dim=-1)
+
+
+def mse_freq_unitary_torch(a: Tensor, b: Tensor) -> Tensor:
+    """Frequency-domain MSE using unitary FFT."""
+    A = _unitary_fft(a, dim=-1)
+    B = _unitary_fft(b, dim=-1)
+    return ((A - B).abs() ** 2).sum(dim=-1) / a.size(-1)
+
+
