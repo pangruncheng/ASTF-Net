@@ -1,12 +1,23 @@
 # ASTF-net training configuration
 
 # Dataset and dataloader
-data_path: "/group/data/dataset_ASTF-net/Target_waveforms"
-train_hdf5_file: "${data_path}/Train_pairs_2_Samezero_256_new_3_1.h5"
-val_hdf5_file: "${data_path}/Validation_pairs_2_Samezero_256_new_3_1.h5"
-test_hdf5_file: "${data_path}/Test_level1_pairs_2_Samezero_256_new_3_1.h5"
+data_path: "/data/prc/dataset/EGFs_new_3_with_ASTFs_vr_ratio2_min100"
+test_path: "/data/prc/dataset/test_set"
+train_hdf5_file: "${data_path}/Train_new_3_pairs_Samezero256_normalize_vr_ratio2_min100_2.h5"
+val_hdf5_file: "${data_path}/Validation_new_3_pairs_Samezero256_normalize_vr_ratio2_min100_2.h5"
+test_level_1_hdf5_file: "${test_path}/Test_level1_new_3_pairs_Samezero256_normalize_vr_1.h5"
+test_level_2_hdf5_file: "${test_path}/Test_level2_new_3_pairs_Samezero256_normalize_vr_1.h5"
+test_level_3_hdf5_file: "${test_path}/Test_level3_new_3_pairs_Samezero256_normalize_vr_1.h5"
+# data_path: "/group/data/dataset_ASTF-net/Target_waveforms"
+# train_hdf5_file: "${data_path}/Train_pairs_Samezero256_beginning301_1.h5"
+# val_hdf5_file: "${data_path}/Validation_pairs_Samezero256_beginning301_1.h5"
+# test_level_1_hdf5_file: "${data_path}/Test_level1_pairs_Samezero256_beginning301_1.h5"
+# test_level_2_hdf5_file: "${data_path}/Test_level2_pairs_Samezero256_beginning301_1.h5"
+# test_level_3_hdf5_file: "${data_path}/Test_level3_pairs_Samezero256_beginning301_1.h5"
 batch_size: 4096
 num_workers: 16
+log_normalize_astf: false # Whether to apply signed log normalization to ASTF data
+log_normalize_input: true # Whether to apply signed log normalization to input waveforms
 
 # Data augmentations (SpeechBrain style)
 data_augmentations:
@@ -17,8 +28,12 @@ data_augmentations:
   - AddTrend:
       min_deg: -1
       max_deg: 1
+  - RandomShift:
+      max_shift: 10
 
 # Model hyperparameters
+model_name: "simplecnn"       # <--- "simplecnn", "unet1d", "cnnlstm_fusion"
+# dropout_rate: 0.2
 in_channels: 2
 output_length: 256
 lr: 0.001
@@ -48,8 +63,11 @@ callbacks:
     # verbose: true
 
 # Optimization
-loss: "nonzero_weighted_mse"
+# loss: "nonzero_weighted_mse"
 # loss: "convalignLoss"
-# loss_weight: 0.5
+loss: "amse"
+loss_fft_dim: -1
+loss_reduction: mean
+loss_eps: 1e-6
 
 output_dir: "output/"
