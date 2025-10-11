@@ -127,6 +127,40 @@ class AddTrend(nn.Module):
             trended_waveform[i] = waveform[i] + trend
         return trended_waveform
 
+class RandomShift(nn.Module):
+    """
+    Randomly shift the waveform in time (to the right) by up to max_shift samples.
+    The shifted part is padded with zeros.
+
+    Args:
+        max_shift (int): Maximum number of samples to shift.
+    """
+
+    def __init__(self, max_shift: int = 10):
+        super().__init__()
+        self.max_shift = max_shift
+
+    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            waveform (torch.Tensor): Input waveform tensor of shape (batch, seq_len)
+
+        Returns:
+            torch.Tensor: Time-shifted waveform with same shape
+        """
+        batch_size, seq_len = waveform.shape
+        shifted_waveform = torch.zeros_like(waveform)
+
+        for i in range(batch_size):
+            shift = torch.randint(0, self.max_shift + 1, (1,)).item()
+            if shift == 0:
+                shifted_waveform[i] = waveform[i]
+            else:
+                shifted_waveform[i, shift:] = waveform[i, :-shift]
+                shifted_waveform[i, :shift] = 0  # pad left with zeros
+
+        return shifted_waveform
+
 
 def load_augmenter(augmentation_params: Dict[str, Any]) -> Augmenter:
     """Load an augmenter from a dictionary of augmentation parameters.
@@ -168,6 +202,8 @@ def load_augmentations(
                 augmentation = DropRegion(**aug_params)
             elif aug_name == "AddTrend":
                 augmentation = AddTrend(**aug_params)
+            elif aug_name == "RandomShift":
+                augmentation = RandomShift(**aug_params)
             else:
                 raise ValueError(f"Unknown augmentation: {aug_name}")
             augmentations.append(augmentation)
@@ -182,6 +218,7 @@ if __name__ == "__main__":
             {"AddTrend": {"min_deg": -2, "max_deg": 2}},
             {"AddNoise": {"snr_low": 10, "snr_high": 20}},
             {"DropChunk": {"drop_length_low": 5, "drop_length_high": 10}},
+            {"RandomShift": {"max_shift": 10}},
         ]
     }
     augmenter = load_augmenter(augmentation_params)
