@@ -6,9 +6,32 @@ from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, Mode
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from astfnet.data_io.datamodule import SeismicDataModule
-from astfnet.models.cnn import PLSimpleCNN
+from astfnet.models.cnn import PLCNN
+from astfnet.models.cnn_mask import PLCNN_mask
+from astfnet.models.cnn_lstm import PLCNNLSTMPredictor
+from astfnet.models.unet import PLUNet1D
+from astfnet.models.cnn_amplitude_fusion import PLAmplitudeFusionCNN
+from astfnet.models.cnn_lstm_fusion import PLCNNLSTMFusion
 
-
+    
+def get_model(config):
+    """Return the model based on model_name field."""
+    name = config.get("model_name", "simplecnn").lower()
+    if name == "simplecnn" or name == "vgg" or name == "deepcnn" or name == "fmnet1d":
+        return PLCNN(config)
+    elif name == "simplecnn_mask":
+        return PLCNN_mask(config)
+    elif name == "cnnlstm":
+        return PLCNNLSTMPredictor(config)
+    elif name == "amplitude_fusion":
+        return PLAmplitudeFusionCNN(config)
+    elif name == "cnnlstm_fusion":
+        return PLCNNLSTMFusion(config)
+    elif name == "unet1d":
+        return PLUNet1D(config)
+    else:
+        raise ValueError(f"[ERROR] Unsupported model_name: {name}")
+    
 def main() -> None:
     """Main function to train the ASTF-net model."""
     parser = argparse.ArgumentParser(description="Train ASTF-net with PyTorch Lightning.")
@@ -25,7 +48,10 @@ def main() -> None:
     config = dict(config)
     max_epochs = config["max_epochs"]
     datamodule = SeismicDataModule(config)
-    model = PLSimpleCNN(config)
+    
+    # Model (auto selected by config)
+    model = get_model(config)
+
     device = config["device"]
     gpus = config["gpus"]
 
