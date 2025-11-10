@@ -17,7 +17,7 @@ repos:
       - id: ruff-lint
         name: ruff linter
         entry: ruff check
-        language: python
+        language: system
         types: [python]
         args: [--fix]
 
@@ -27,5 +27,5 @@ repos:
       - id: ruff-format
         name: ruff formatter
         entry: ruff format
-        language: python
+        language: system
         types: [python]
