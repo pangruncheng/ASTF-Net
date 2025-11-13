@@ -1,13 +1,15 @@
+"""DataModule for seismic dataset loading and augmentation in ASTF-net."""
+
+import copy
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
+import torch.distributed as dist
 from torch.utils.data import DataLoader
 
 from astfnet.data_io.dataset import (
     SeismicDatasetHDF5,
     SeismicDatasetHDF5_mask,
-    # SeismicDatasetHDF5_dual,       # input:(x1, x2)
-    # SeismicDatasetHDF5_ampfusion,   # input:(x, amp)
 )
 
 
@@ -18,11 +20,11 @@ class SeismicDataModule(pl.LightningDataModule):
     for training, validation, and testing.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self: "SeismicDataModule", config: Dict[str, Any]) -> None:
         """Initialize the SeismicDataModule with configuration.
 
         Args:
-            config: Configuration dictionary containing:
+            config (Dict[str, Any]): Configuration dictionary containing:
                 - batch_size: Batch size for DataLoaders
                 - num_workers: Number of workers for DataLoaders
                 - train_hdf5_file: Path to training HDF5 file
@@ -39,31 +41,44 @@ class SeismicDataModule(pl.LightningDataModule):
         self.test_hdf5_file = config.get("test_hdf5_file")
         self.log_normalize_astf = config.get("log_normalize_astf", True)
         self.log_normalize_input = config.get("log_normalize_input", True)
-        self.augmentation_params = {"data_augmentations": config.get("data_augmentations", [])}
-        
+        self.augmentation_params = {
+            "augmentations": config.get("augmentations", config.get("data_augmentations", [])),
+            "max_augmentations": int(config.get("max_augmentations", 0)),
+        }
+
         model_name = config.get("model_name", "").lower()
 
         if "mask" in model_name:
             self.DatasetClass = SeismicDatasetHDF5_mask
-        elif "lstm_fusion" in model_name:
-            self.DatasetClass = SeismicDatasetHDF5_dual
-        elif "amp_fusion" in model_name:
-            self.DatasetClass = SeismicDatasetHDF5_ampfusion
         else:
             self.DatasetClass = SeismicDatasetHDF5
 
-    def setup(self, stage: Optional[str] = None, test_name: Optional[str] = None):
+    def setup(self: "SeismicDataModule", stage: Optional[str] = None, test_name: Optional[str] = None) -> None:
+        """Set up training, validation, or test datasets based on the stage.
+
+        Args:
+            stage (Optional[str]): One of {"fit", "validate", "test"} or None.
+            test_name (Optional[str]): Optional key for selecting a specific test dataset.
+        """
+        if dist.is_initialized():
+            print(f"[Rank {dist.get_rank()}] DataModule setup")
+
         if stage == "fit" or stage is None:
             print("✅ Setting up training and validation datasets")
+
+            aug_params_train = copy.deepcopy(self.augmentation_params)
+            aug_params_val = None
+
             self.train_dataset = self.DatasetClass(
                 self.train_hdf5_file,
-                augmentation_params=self.augmentation_params,
+                augmentation_params=aug_params_train,
                 log_normalize_astf=self.log_normalize_astf,
                 log_normalize_input=self.log_normalize_input,
             )
+
             self.val_dataset = self.DatasetClass(
                 self.val_hdf5_file,
-                augmentation_params=None,
+                augmentation_params=aug_params_val,
                 log_normalize_astf=self.log_normalize_astf,
                 log_normalize_input=self.log_normalize_input,
             )
@@ -96,11 +111,11 @@ class SeismicDataModule(pl.LightningDataModule):
             )
             self.test_name = test_name
 
-    def train_dataloader(self) -> DataLoader:
+    def train_dataloader(self: "SeismicDataModule") -> DataLoader:
         """Create and return the training DataLoader.
 
         Returns:
-            DataLoader configured for training data.
+            DataLoader: Configured for training data.
         """
         return DataLoader(
             self.train_dataset,
@@ -108,13 +123,15 @@ class SeismicDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=True,
             pin_memory=True,
+            drop_last=True,
+            persistent_workers=True,
         )
 
-    def val_dataloader(self) -> DataLoader:
+    def val_dataloader(self: "SeismicDataModule") -> DataLoader:
         """Create and return the validation DataLoader.
 
         Returns:
-            DataLoader configured for validation data.
+            DataLoader: Configured for validation data.
         """
         return DataLoader(
             self.val_dataset,
@@ -124,11 +141,11 @@ class SeismicDataModule(pl.LightningDataModule):
             pin_memory=True,
         )
 
-    def test_dataloader(self) -> DataLoader:
+    def test_dataloader(self: "SeismicDataModule") -> DataLoader:
         """Create and return the test DataLoader.
 
         Returns:
-            DataLoader configured for test data.
+            DataLoader: Configured for test data.
         """
         return DataLoader(
             self.test_dataset,

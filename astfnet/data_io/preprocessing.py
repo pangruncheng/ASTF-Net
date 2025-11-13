@@ -1,20 +1,18 @@
-"""
-Data preprocessing utilities for ASTF-net.
-"""
+"""Data preprocessing utilities for ASTF-net."""
+
+import os
+from typing import List, Tuple
 
 import h5py
 import numpy as np
 import torch
 from obspy import read
-from typing import List, Tuple
-import os
 
-from astfnet.utils.seismic_utils import read_lst_file, compute_M0, get_window_times
+from astfnet.utils.seismic_utils import compute_M0, get_window_times, read_lst_file
 
 
 def load_sac_file(sac_file: str) -> object:
-    """
-    Load SAC file and return waveform data.
+    """Load SAC file and return waveform data.
 
     Args:
         sac_file: Path to SAC file
@@ -27,8 +25,7 @@ def load_sac_file(sac_file: str) -> object:
 
 
 def pad_to_max_length(waveform_data: np.ndarray, max_length: int) -> np.ndarray:
-    """
-    Pad waveform data to maximum length.
+    """Pad waveform data to maximum length.
 
     Args:
         waveform_data: Input waveform data
@@ -38,17 +35,14 @@ def pad_to_max_length(waveform_data: np.ndarray, max_length: int) -> np.ndarray:
         Padded waveform data
     """
     if len(waveform_data) < max_length:
-        padded_data = np.pad(
-            waveform_data, (0, max_length - len(waveform_data)), mode="constant"
-        )
+        padded_data = np.pad(waveform_data, (0, max_length - len(waveform_data)), mode="constant")
     else:
         padded_data = waveform_data
     return padded_data
 
 
 def normalize_waveform(waveform: np.ndarray) -> Tuple[float, np.ndarray]:
-    """
-    Normalize waveform data.
+    """Normalize waveform data.
 
     Args:
         waveform: Input waveform data
@@ -77,8 +71,7 @@ def normalize_waveform(waveform: np.ndarray) -> Tuple[float, np.ndarray]:
 def load_data_pair(
     target_waveform_path: str, egf_path: str, astf_path: str
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Load a pair of data, return Target, EGF, ASTF tensors.
+    """Load a pair of data, return Target, EGF, ASTF tensors.
 
     Args:
         target_waveform_path: Path to target waveform file
@@ -118,12 +111,8 @@ def load_data_pair(
     return target_waveform_tensor, egf_tensor, astf_tensor
 
 
-def save_data_to_hdf5(
-    lst_file: str, hdf5_filename: str, batch_size: int = 10000, compress: bool = True
-) -> None:
-    """
-    Read data paths from .lst file, load and save data as HDF5 format,
-    optimized for batch writing.
+def save_data_to_hdf5(lst_file: str, hdf5_filename: str, batch_size: int = 10000, compress: bool = True) -> None:
+    """Read data paths from .lst file, load and save data as HDF5 format, optimized for batch writing.
 
     Args:
         lst_file: Path to LST file containing data paths
@@ -172,9 +161,7 @@ def save_data_to_hdf5(
 
         for idx, (target_waveform_path, egf_path, astf_path) in enumerate(data_pairs):
             # Load data pair
-            target_waveform_tensor, egf_tensor, astf_tensor = load_data_pair(
-                target_waveform_path, egf_path, astf_path
-            )
+            target_waveform_tensor, egf_tensor, astf_tensor = load_data_pair(target_waveform_path, egf_path, astf_path)
 
             # Convert data to NumPy arrays and add to batch
             target_waveforms_batch.append(target_waveform_tensor.numpy())
@@ -183,15 +170,11 @@ def save_data_to_hdf5(
 
             # If current batch reaches specified size, write to HDF5 file
             if len(target_waveforms_batch) >= batch_size:
-                target_waveforms_ds.resize(
-                    target_waveforms_ds.shape[0] + len(target_waveforms_batch), axis=0
-                )
+                target_waveforms_ds.resize(target_waveforms_ds.shape[0] + len(target_waveforms_batch), axis=0)
                 egfs_ds.resize(egfs_ds.shape[0] + len(egfs_batch), axis=0)
                 astfs_ds.resize(astfs_ds.shape[0] + len(astfs_batch), axis=0)
 
-                target_waveforms_ds[-len(target_waveforms_batch) :] = np.array(
-                    target_waveforms_batch
-                )
+                target_waveforms_ds[-len(target_waveforms_batch) :] = np.array(target_waveforms_batch)
                 egfs_ds[-len(egfs_batch) :] = np.array(egfs_batch)
                 astfs_ds[-len(astfs_batch) :] = np.array(astfs_batch)
 
@@ -206,15 +189,11 @@ def save_data_to_hdf5(
 
         # If there are remaining data (less than one batch), write to HDF5 file
         if target_waveforms_batch:
-            target_waveforms_ds.resize(
-                target_waveforms_ds.shape[0] + len(target_waveforms_batch), axis=0
-            )
+            target_waveforms_ds.resize(target_waveforms_ds.shape[0] + len(target_waveforms_batch), axis=0)
             egfs_ds.resize(egfs_ds.shape[0] + len(egfs_batch), axis=0)
             astfs_ds.resize(astfs_ds.shape[0] + len(astfs_batch), axis=0)
 
-            target_waveforms_ds[-len(target_waveforms_batch) :] = np.array(
-                target_waveforms_batch
-            )
+            target_waveforms_ds[-len(target_waveforms_batch) :] = np.array(target_waveforms_batch)
             egfs_ds[-len(egfs_batch) :] = np.array(egfs_batch)
             astfs_ds[-len(astfs_batch) :] = np.array(astfs_batch)
 
@@ -227,8 +206,7 @@ def preprocess_seismic_data(
     batch_size: int = 10000,
     compress: bool = True,
 ) -> None:
-    """
-    Preprocess seismic data from multiple LST files and save to HDF5.
+    """Preprocess seismic data from multiple LST files and save to HDF5.
 
     Args:
         input_paths: List of LST file paths

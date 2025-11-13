@@ -1,4 +1,6 @@
-from typing import Any, Dict, List
+"""Data augmentation modules for ASTF-net."""
+
+from typing import Any, Dict, List, Optional
 
 import torch
 import torch.nn as nn
@@ -18,7 +20,7 @@ class AddRandomNoise(nn.Module):
         (batch, seq_len)
     """
 
-    def __init__(self, noise_level: float = 0.05) -> None:
+    def __init__(self: "AddRandomNoise", noise_level: float = 0.05) -> None:
         """Initialize AddRandomNoise.
 
         Args:
@@ -27,7 +29,7 @@ class AddRandomNoise(nn.Module):
         super().__init__()
         self.noise_level = noise_level
 
-    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+    def forward(self: "AddRandomNoise", waveform: torch.Tensor) -> torch.Tensor:
         """Add random noise to the batch of waveforms.
 
         Args:
@@ -53,7 +55,7 @@ class DropRegion(nn.Module):
         (batch, seq_len)
     """
 
-    def __init__(self, max_drop_length: int = 10) -> None:
+    def __init__(self: "DropRegion", max_drop_length: int = 10) -> None:
         """Initialize DropRegion.
 
         Args:
@@ -62,14 +64,14 @@ class DropRegion(nn.Module):
         super().__init__()
         self.max_drop_length = max_drop_length
 
-    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+    def forward(self: "DropRegion", waveform: torch.Tensor) -> torch.Tensor:
         """Randomly zero out a region in each waveform in the batch.
 
         Args:
             waveform (torch.Tensor): Input waveform tensor of shape (batch, seq_len).
 
         Returns:
-            torch.Tensor: waveform with dropped regions
+            torch.Tensor: waveform with dropped regions.
         """
         batch, seq_len = waveform.shape
         dropped_waveform = waveform.clone()
@@ -94,7 +96,7 @@ class AddTrend(nn.Module):
         (batch, seq_len)
     """
 
-    def __init__(self, min_deg: float = -2, max_deg: float = 2) -> None:
+    def __init__(self: "AddTrend", min_deg: float = -2, max_deg: float = 2) -> None:
         """Initialize AddTrend.
 
         Args:
@@ -105,14 +107,14 @@ class AddTrend(nn.Module):
         self.min_deg = min_deg
         self.max_deg = max_deg
 
-    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
+    def forward(self: "AddTrend", waveform: torch.Tensor) -> torch.Tensor:
         """Add a linear trend to each waveform in the batch.
 
         Args:
             waveform (torch.Tensor): Input waveform tensor of shape (batch, seq_len).
 
         Returns:
-            torch.Tensor: waveform with trend
+            torch.Tensor: waveform with trend.
         """
         batch, seq_len = waveform.shape
         trended_waveform = waveform.clone()
@@ -127,26 +129,29 @@ class AddTrend(nn.Module):
             trended_waveform[i] = waveform[i] + trend
         return trended_waveform
 
+
 class RandomShift(nn.Module):
-    """
-    Randomly shift the waveform in time (to the right) by up to max_shift samples.
+    """Randomly shift the waveform in time (to the right) by up to max_shift samples.
+
     The shifted part is padded with zeros.
 
     Args:
         max_shift (int): Maximum number of samples to shift.
     """
 
-    def __init__(self, max_shift: int = 10):
+    def __init__(self: "RandomShift", max_shift: int = 10) -> None:
+        """Initialize RandomShift."""
         super().__init__()
         self.max_shift = max_shift
 
-    def forward(self, waveform: torch.Tensor) -> torch.Tensor:
-        """
+    def forward(self: "RandomShift", waveform: torch.Tensor) -> torch.Tensor:
+        """Randomly shift the waveform in time.
+
         Args:
-            waveform (torch.Tensor): Input waveform tensor of shape (batch, seq_len)
+            waveform (torch.Tensor): Input waveform tensor of shape (batch, seq_len).
 
         Returns:
-            torch.Tensor: Time-shifted waveform with same shape
+            torch.Tensor: Time-shifted waveform with same shape.
         """
         batch_size, seq_len = waveform.shape
         shifted_waveform = torch.zeros_like(waveform)
@@ -162,24 +167,35 @@ class RandomShift(nn.Module):
         return shifted_waveform
 
 
-def load_augmenter(augmentation_params: Dict[str, Any]) -> Augmenter:
+def load_augmenter(augmentation_params: Dict[str, Any]) -> Optional[Augmenter]:
     """Load an augmenter from a dictionary of augmentation parameters.
 
     Args:
         augmentation_params (Dict[str, Any]): A dictionary of augmentation parameters.
 
     Returns:
-        Augmenter: An augmenter object.
+        Optional[Augmenter]: An augmenter object or None if no augmentations.
     """
+    print("🔥 load_augmenter received:", augmentation_params)
     augmentations = load_augmentations(augmentation_params)
-    augmenter_kwargs = augmentation_params.get("augmenter", {})
-    augmenter = Augmenter(augmentations=augmentations, **augmenter_kwargs)
+    max_augmentations = int(augmentation_params.get("max_augmentations", 1))
+
+    if not augmentations:
+        print("⚠️ No valid augmentations found. Returning None.")
+        return None
+
+    print(f"✅ Loaded {len(augmentations)} augmentations, max_augmentations={max_augmentations}")
+
+    augmenter = Augmenter(
+        augmentations=augmentations,
+        max_augmentations=max_augmentations,
+        shuffle_augmentations=True,
+        concat_original=False,
+    )
     return augmenter
 
 
-def load_augmentations(
-    augmentation_params: Dict[str, Any],
-) -> List[torch.nn.Module]:
+def load_augmentations(augmentation_params: Dict[str, Any]) -> List[torch.nn.Module]:
     """Load a list of augmentation modules from a dictionary of parameters.
 
     Args:
@@ -189,7 +205,12 @@ def load_augmentations(
         List[torch.nn.Module]: List of augmentation modules.
     """
     augmentations = []
-    data_augmentations = augmentation_params.get("data_augmentations", [])
+    data_augmentations = augmentation_params.get("data_augmentations", augmentation_params.get("augmentations", []))
+
+    if len(data_augmentations) == 0:
+        print("⚠️ [DEBUG] data_augmentations list is empty in load_augmentations.")
+        return augmentations
+
     for data_augmentation in data_augmentations:
         for aug_name, aug_params in data_augmentation.items():
             if aug_name == "AddNoise":
