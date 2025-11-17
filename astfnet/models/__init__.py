@@ -1,9 +1,5 @@
-"""
-Neural network models for ASTF-net.
-"""
-
-from .cnn import PLSimpleCNN
+from .cnn import PLCNN
 
 __all__ = [
-    "PLSimpleCNN",
+    "PLCNN",
 ]
