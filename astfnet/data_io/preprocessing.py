@@ -6,19 +6,19 @@ from typing import List, Tuple
 import h5py
 import numpy as np
 import torch
-from obspy import read
+from obspy import Trace, read
 
 from astfnet.utils.seismic_utils import compute_M0, get_window_times, read_lst_file
 
 
-def load_sac_file(sac_file: str) -> object:
+def load_sac_file(sac_file: str) -> Trace:
     """Load SAC file and return waveform data.
 
     Args:
-        sac_file: Path to SAC file
+        sac_file: Path to SAC file.
 
     Returns:
-        ObsPy trace object
+        waveform: An ObsPy trace object.
     """
     waveform = read(sac_file)[0]
     return waveform

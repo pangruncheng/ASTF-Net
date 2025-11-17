@@ -42,7 +42,6 @@ def load_loss(
         loss_fn = torch.nn.MSELoss()
     elif loss_name == "amse":
         logger.info("AMSELoss (Amplitude and Phase Spectral Loss) is loaded as the loss function.")
-
         # Read parameters from config file (provide default values)
         fft_dim = config.get("loss_fft_dim", -1)
         reduction = config.get("loss_reduction", "mean")

@@ -1,19 +1,16 @@
 import torch
 import torch.fft
 import torch.nn as nn
-from torch import Tensor
 
 
 class WeightedMSE(nn.Module):
     """Weighted Mean Squared Error loss module."""
 
-    def __init__(self: "WeightedMSE") -> None:
+    def __init__(self) -> None:
         """Initialize the WeightedMSE loss module."""
-        super(WeightedMSE, self).__init__()
+        super().__init__()
 
-    def forward(
-        self: "WeightedMSE", y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate weighted mean squared error.
 
         Args:
@@ -37,13 +34,11 @@ class WeightedMSE(nn.Module):
 class EffectiveRegionWeightedMSELoss(nn.Module):
     """MSE loss weighted by effective regions where either prediction or target is non-zero."""
 
-    def __init__(self: "EffectiveRegionWeightedMSELoss") -> None:
+    def __init__(self) -> None:
         """Initialize the EffectiveRegionWeightedMSELoss module."""
-        super(EffectiveRegionWeightedMSELoss, self).__init__()
+        super().__init__()
 
-    def forward(
-        self: "EffectiveRegionWeightedMSELoss", y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate MSE weighted by effective regions.
 
         Args:
@@ -69,13 +64,11 @@ class EffectiveRegionWeightedMSELoss(nn.Module):
 class NonZeroWeightedMSE(nn.Module):
     """MSE loss weighted by non-zero error regions."""
 
-    def __init__(self: "NonZeroWeightedMSE") -> None:
+    def __init__(self) -> None:
         """Initialize the NonZeroWeightedMSE module."""
-        super(NonZeroWeightedMSE, self).__init__()
+        super().__init__()
 
-    def forward(
-        self: "NonZeroWeightedMSE", y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate MSE weighted by non-zero error regions.
 
         Args:
@@ -101,20 +94,18 @@ class NonZeroWeightedMSE(nn.Module):
 class AmplitudeWeightedMSELoss(nn.Module):
     """MSE loss weighted by the amplitude of the target signal."""
 
-    def __init__(self: "AmplitudeWeightedMSELoss", epsilon: float, a: float) -> None:
+    def __init__(self, epsilon: float, a: float) -> None:
         """Initialize the AmplitudeWeightedMSELoss module.
 
         Args:
             epsilon: Small value to avoid division by zero.
             a: Exponent for amplitude weighting.
         """
-        super(AmplitudeWeightedMSELoss, self).__init__()
+        super().__init__()
         self.epsilon = epsilon
         self.a = a
 
-    def forward(
-        self: "AmplitudeWeightedMSELoss", y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate amplitude-weighted MSE.
 
         Args:
@@ -145,19 +136,17 @@ class AmplitudeWeightedMSELoss(nn.Module):
 
 
 ###################AMSELoss####################
-
-
-def _unitary_fft(x: Tensor, dim: int = -1) -> Tensor:
+def _unitary_fft(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     """Unitary FFT (norm='ortho') along `dim`."""
     return torch.fft.fft(x, dim=dim, norm="ortho")
 
 
-def _per_bin_psd_unitary(X: Tensor, N: int) -> Tensor:
+def _per_bin_psd_unitary(X: torch.Tensor, N: int) -> torch.Tensor:
     """Per-bin PSD so that sum_k PSD_k = average power per sample."""
     return (X.abs() ** 2) / float(N)
 
 
-def _per_bin_cos_phase(X: Tensor, Y: Tensor, eps: float) -> Tensor:
+def _per_bin_cos_phase(X: torch.Tensor, Y: torch.Tensor, eps: float) -> torch.Tensor:
     """cos(Δφ_k) = Re{X Y*} / (|X||Y| + eps), elementwise over the FFT axis.
 
     Returns:
@@ -180,14 +169,14 @@ class AMSELoss(nn.Module):
         eps: small constant for numerical stability
     """
 
-    def __init__(self: "AMSELoss", fft_dim: int = -1, reduction: str = "mean", eps: float = 1e-12) -> None:
+    def __init__(self, fft_dim: int = -1, reduction: str = "mean", eps: float = 1e-12) -> None:
         """Initialize AMSELoss with FFT configuration."""
         super().__init__()
         self.fft_dim = fft_dim
         self.reduction = reduction
         self.eps = eps
 
-    def forward(self: "AMSELoss", pred: Tensor, target: Tensor) -> Tensor:
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Compute AMSE loss between predicted and target tensors."""
         if pred.shape != target.shape:
             raise ValueError("pred and target must have identical shapes")
@@ -218,17 +207,3 @@ class AMSELoss(nn.Module):
             return amse_per_example.sum()
         else:
             return amse_per_example
-
-
-# Optional helpers
-def mse_time(x: Tensor, y: Tensor) -> Tensor:
-    """Time-domain mean squared error."""
-    e = x - y
-    return torch.mean(torch.abs(e) ** 2, dim=-1)
-
-
-def mse_freq_unitary_torch(a: Tensor, b: Tensor) -> Tensor:
-    """Frequency-domain MSE using unitary FFT."""
-    A = _unitary_fft(a, dim=-1)
-    B = _unitary_fft(b, dim=-1)
-    return ((A - B).abs() ** 2).sum(dim=-1) / a.size(-1)

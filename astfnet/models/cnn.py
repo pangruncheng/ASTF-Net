@@ -1,5 +1,6 @@
 """CNN models for ASTF-net."""
 
+import logging
 from typing import Dict, List, Literal, Optional, Union
 
 import pytorch_lightning as pl
@@ -8,11 +9,13 @@ import torch.nn as nn
 
 from astfnet.models.optim import load_loss as optim
 
+logger = logging.getLogger(__name__)
+
 
 class SimpleCNN(nn.Module):
     """A simple CNN network for deconvolution learning tasks."""
 
-    def __init__(self: "SimpleCNN", in_channels: int = 2, output_length: int = 501) -> None:
+    def __init__(self, in_channels: int = 2, output_length: int = 501) -> None:
         """Initialize SimpleCNN.
 
         Args:
@@ -50,7 +53,7 @@ class SimpleCNN(nn.Module):
             nn.Softplus(),
         )
 
-    def forward(self: "SimpleCNN", target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
+    def forward(self, target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
         Args:
@@ -69,7 +72,7 @@ class SimpleCNN(nn.Module):
 class PLCNN(pl.LightningModule):
     """PyTorch Lightning module for CNN with training/validation/test logic."""
 
-    def __init__(self: "PLCNN", config: Dict[str, Union[str, float, int]]) -> None:
+    def __init__(self, config: Dict[str, Union[str, float, int]]) -> None:
         """Initialize PLCNN.
 
         Args:
@@ -91,7 +94,7 @@ class PLCNN(pl.LightningModule):
         self.test_preds: List[torch.Tensor] = []
         self.test_trues: List[torch.Tensor] = []
 
-    def forward(self: "PLCNN", target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
+    def forward(self, target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
         """Forward pass through the model.
 
         Args:
@@ -104,7 +107,7 @@ class PLCNN(pl.LightningModule):
         return self.model(target_waveform, egf)
 
     def safe_log(
-        self: "PLCNN",
+        self,
         name: str,
         value: Union[torch.Tensor, float],  # float or Tensor
         *,
@@ -159,7 +162,7 @@ class PLCNN(pl.LightningModule):
         else:
             self.print(f"[WARNING] {name} is NaN or Inf. Skipped logging.")
 
-    def training_step(self: "PLCNN", batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step with loss computation and logging.
 
         Args:
@@ -217,12 +220,12 @@ class PLCNN(pl.LightningModule):
         self.safe_log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
-    def on_test_start(self: "PLCNN") -> None:
+    def on_test_start(self) -> None:
         """Initialize test predictions and ground truth lists."""
         self.test_preds = []
         self.test_trues = []
 
-    def test_step(self: "PLCNN", batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Test step with loss computation and result collection.
 
         Args:
@@ -241,14 +244,14 @@ class PLCNN(pl.LightningModule):
         self.safe_log("test/loss", loss, prog_bar=True)
         return loss
 
-    def on_test_epoch_end(self: "PLCNN") -> None:
+    def on_test_epoch_end(self) -> None:
         """Concatenate all test predictions and ground truth values."""
         preds = torch.cat(self.test_preds, dim=0)
         trues = torch.cat(self.test_trues, dim=0)
         self.test_preds = preds
         self.test_trues = trues
 
-    def configure_optimizers(self: "PLCNN") -> Dict[str, object]:
+    def configure_optimizers(self) -> Dict[str, object]:
         """Configure optimizers and learning rate schedulers.
 
         Returns:
