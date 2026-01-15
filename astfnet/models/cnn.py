@@ -69,6 +69,101 @@ class SimpleCNN(nn.Module):
         return x
 
 
+class SimpleCNN_Tunable(nn.Module):
+    """Tunable version of the original SimpleCNN.
+
+    When parameters take default values, this model is EXACTLY
+    equivalent to the original SimpleCNN.
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 2,
+        output_length: int = 256,
+        *,
+        base_channels: int = 32,
+        fc_hidden_dim: int = 1024,
+        dropout_rate: float = 0.5,
+        output_activation: str = "softplus",
+    ) -> None:
+        """Initialize the tunable SimpleCNN.
+
+        Args:
+            in_channels: Number of input channels.
+            output_length: Length of output sequence.
+            base_channels: Number of channels in the first convolution layer.
+            fc_hidden_dim: Hidden dimension of the fully connected layer.
+            dropout_rate: Dropout rate applied in the fully connected layer.
+            output_activation: Activation function of the output layer.
+        """
+        super().__init__()
+
+        # -------- Feature extractor (identical topology) --------
+        self.feature_extractor = nn.Sequential(
+            nn.Conv1d(in_channels, base_channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels, base_channels * 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels * 2, base_channels * 4, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels * 4, base_channels * 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels * 8, base_channels * 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+        )
+
+        # -------- Fully connected head --------
+        self.regressor = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(base_channels * 16 * 8, fc_hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(fc_hidden_dim, output_length),
+            self._get_activation(output_activation),
+        )
+
+    def _get_activation(self, name: str) -> nn.Module:
+        """Return output activation module.
+
+        Args:
+            name: Name of activation function.
+
+        Returns:
+            PyTorch activation module.
+        """
+        name = name.lower()
+        if name == "softplus":
+            return nn.Softplus()
+        if name == "relu":
+            return nn.ReLU()
+        if name == "identity":
+            return nn.Identity()
+        raise ValueError(f"Unsupported activation: {name}")
+
+    def forward(
+        self,
+        target_waveform: torch.Tensor,
+        egf: torch.Tensor,
+    ) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            target_waveform: Target waveform tensor.
+            egf: Empirical Green's function tensor.
+
+        Returns:
+            Predicted source time function.
+        """
+        x = torch.stack([target_waveform, egf], dim=1)
+        x = self.feature_extractor(x)
+        return self.regressor(x)
+
+
 class PLCNN(pl.LightningModule):
     """PyTorch Lightning module for CNN with training/validation/test logic."""
 
@@ -87,6 +182,15 @@ class PLCNN(pl.LightningModule):
         model_type = config.get("model_name", "simple")
         if model_type == "simplecnn":
             self.model = SimpleCNN(in_channels=in_channels, output_length=output_length)
+        elif model_type == "simplecnn_tunable":
+            self.model = SimpleCNN_Tunable(
+                in_channels=config["in_channels"],
+                output_length=config["output_length"],
+                base_channels=config["base_channels"],
+                fc_hidden_dim=config["fc_hidden_dim"],
+                dropout_rate=config["dropout_rate"],
+                output_activation=config["output_activation"],
+            )
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
         self.loss_fn = optim(config)
