@@ -1,5 +1,6 @@
 """CNN models for ASTF-net."""
 
+import logging
 from typing import Dict, List, Literal, Optional, Union
 
 import pytorch_lightning as pl
@@ -7,6 +8,8 @@ import torch
 import torch.nn as nn
 
 from astfnet.models.optim import load_loss as optim
+
+logger = logging.getLogger(__name__)
 
 
 class SimpleCNN(nn.Module):
@@ -19,7 +22,7 @@ class SimpleCNN(nn.Module):
             in_channels: Number of input channels (e.g., 2 for target waveform and EGF)
             output_length: Length of output sequence (e.g., source time function length)
         """
-        super(SimpleCNN, self).__init__()
+        super().__init__()
 
         # Feature extraction module
         self.feature_extractor = nn.Sequential(
@@ -66,11 +69,106 @@ class SimpleCNN(nn.Module):
         return x
 
 
-class PLSimpleCNN(pl.LightningModule):
-    """PyTorch Lightning module for SimpleCNN with training/validation/test logic."""
+class SimpleCNN_Tunable(nn.Module):
+    """Tunable version of the original SimpleCNN.
+
+    When parameters take default values, this model is EXACTLY
+    equivalent to the original SimpleCNN.
+    """
+
+    def __init__(
+        self,
+        in_channels: int = 2,
+        output_length: int = 256,
+        *,
+        base_channels: int = 32,
+        fc_hidden_dim: int = 1024,
+        dropout_rate: float = 0.5,
+        output_activation: str = "softplus",
+    ) -> None:
+        """Initialize the tunable SimpleCNN.
+
+        Args:
+            in_channels: Number of input channels.
+            output_length: Length of output sequence.
+            base_channels: Number of channels in the first convolution layer.
+            fc_hidden_dim: Hidden dimension of the fully connected layer.
+            dropout_rate: Dropout rate applied in the fully connected layer.
+            output_activation: Activation function of the output layer.
+        """
+        super().__init__()
+
+        # -------- Feature extractor (identical topology) --------
+        self.feature_extractor = nn.Sequential(
+            nn.Conv1d(in_channels, base_channels, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels, base_channels * 2, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels * 2, base_channels * 4, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels * 4, base_channels * 8, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+            nn.Conv1d(base_channels * 8, base_channels * 16, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool1d(2),
+        )
+
+        # -------- Fully connected head --------
+        self.regressor = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(base_channels * 16 * 8, fc_hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout_rate),
+            nn.Linear(fc_hidden_dim, output_length),
+            self._get_activation(output_activation),
+        )
+
+    def _get_activation(self, name: str) -> nn.Module:
+        """Return output activation module.
+
+        Args:
+            name: Name of activation function.
+
+        Returns:
+            PyTorch activation module.
+        """
+        name = name.lower()
+        if name == "softplus":
+            return nn.Softplus()
+        if name == "relu":
+            return nn.ReLU()
+        if name == "identity":
+            return nn.Identity()
+        raise ValueError(f"Unsupported activation: {name}")
+
+    def forward(
+        self,
+        target_waveform: torch.Tensor,
+        egf: torch.Tensor,
+    ) -> torch.Tensor:
+        """Forward pass.
+
+        Args:
+            target_waveform: Target waveform tensor.
+            egf: Empirical Green's function tensor.
+
+        Returns:
+            Predicted source time function.
+        """
+        x = torch.stack([target_waveform, egf], dim=1)
+        x = self.feature_extractor(x)
+        return self.regressor(x)
+
+
+class PLCNN(pl.LightningModule):
+    """PyTorch Lightning module for CNN with training/validation/test logic."""
 
     def __init__(self, config: Dict[str, Union[str, float, int]]) -> None:
-        """Initialize PLSimpleCNN.
+        """Initialize PLCNN.
 
         Args:
             config: Configuration dictionary containing model hyperparameters
@@ -80,7 +178,21 @@ class PLSimpleCNN(pl.LightningModule):
         output_length = config.get("output_length", 501)
         lr = config.get("lr", 1e-3)
         self.save_hyperparameters(config)
-        self.model = SimpleCNN(in_channels=in_channels, output_length=output_length)
+        # self.model = SimpleCNN(in_channels=in_channels, output_length=output_length)
+        model_type = config.get("model_name", "simple")
+        if model_type == "simplecnn":
+            self.model = SimpleCNN(in_channels=in_channels, output_length=output_length)
+        elif model_type == "simplecnn_tunable":
+            self.model = SimpleCNN_Tunable(
+                in_channels=config["in_channels"],
+                output_length=config["output_length"],
+                base_channels=config["base_channels"],
+                fc_hidden_dim=config["fc_hidden_dim"],
+                dropout_rate=config["dropout_rate"],
+                output_activation=config["output_activation"],
+            )
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}")
         self.loss_fn = optim(config)
         self.lr = lr
         self.test_preds: List[torch.Tensor] = []
@@ -101,7 +213,7 @@ class PLSimpleCNN(pl.LightningModule):
     def safe_log(
         self,
         name: str,
-        value: torch.Tensor,
+        value: Union[torch.Tensor, float],  # float or Tensor
         *,
         prog_bar: bool = False,
         logger: bool = True,
@@ -132,7 +244,10 @@ class PLSimpleCNN(pl.LightningModule):
             metric_attribute: Attribute to store the metric
             rank_zero_only: If True logs only on rank 0
         """
-        if torch.isfinite(value):
+        # Tensor
+        tensor_value = value if isinstance(value, torch.Tensor) else torch.tensor(value)
+
+        if torch.isfinite(tensor_value):
             self.log(
                 name,
                 value,
@@ -172,18 +287,7 @@ class PLSimpleCNN(pl.LightningModule):
             self.print(f"[ERROR] Model output y_hat contains NaN or Inf at step {self.global_step}")
             return torch.tensor(0.0, requires_grad=True, device=self.device)
 
-        loss_name = self.hparams.get("loss", "mse")
-        if loss_name == "convalignLoss":
-            loss, parts = self.loss_fn(
-                pred_astf=y_hat,
-                true_astf=batch["astf"],
-                egf=batch["egf"],
-                target_waveform=batch["target"],
-            )
-            self.safe_log("train/loss_astf", parts["astf"], on_epoch=True, prog_bar=False)
-            self.safe_log("train/loss_conv", parts["conv"], on_epoch=True, prog_bar=False)
-        else:
-            loss = self.loss_fn(y_hat, batch["astf"])
+        loss = self.loss_fn(y_hat, batch["astf"])
 
         if not torch.isfinite(loss):
             self.print(f"[ERROR] Loss is NaN at step {self.global_step}")
@@ -203,7 +307,7 @@ class PLSimpleCNN(pl.LightningModule):
 
         return loss if torch.isfinite(loss) else torch.tensor(0.0, requires_grad=True, device=self.device)
 
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
+    def validation_step(self: "PLCNN", batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Validation step with loss computation and logging.
 
         Args:
@@ -214,21 +318,10 @@ class PLSimpleCNN(pl.LightningModule):
             Computed loss value
         """
         y_hat = self(batch["target"], batch["egf"])
-        loss_name = self.hparams.get("loss", "mse")
 
-        if loss_name == "convalignLoss":
-            loss, parts = self.loss_fn(
-                pred_astf=y_hat,
-                true_astf=batch["astf"],
-                egf=batch["egf"],
-                target_waveform=batch["target"],
-            )
-            self.safe_log("val/loss_astf", parts["astf"], on_epoch=True)
-            self.safe_log("val/loss_conv", parts["conv"], on_epoch=True)
-        else:
-            loss = self.loss_fn(y_hat, batch["astf"])
+        loss = self.loss_fn(y_hat, batch["astf"])
 
-        self.safe_log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.safe_log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def on_test_start(self) -> None:
@@ -250,13 +343,7 @@ class PLSimpleCNN(pl.LightningModule):
         self.test_preds.append(y_hat.detach().cpu())
         self.test_trues.append(batch["astf"].detach().cpu())
 
-        loss_name = self.hparams.get("loss", "mse")
-        if loss_name == "convalignLoss":
-            loss, _ = self.loss_fn(
-                pred_astf=y_hat, true_astf=batch["astf"], egf=batch["egf"], target_waveform=batch["target"]
-            )
-        else:
-            loss = self.loss_fn(y_hat, batch["astf"])
+        loss = self.loss_fn(y_hat, batch["astf"])
 
         self.safe_log("test/loss", loss, prog_bar=True)
         return loss

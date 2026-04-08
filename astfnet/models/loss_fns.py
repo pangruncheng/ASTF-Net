@@ -1,6 +1,6 @@
 import torch
+import torch.fft
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class WeightedMSE(nn.Module):
@@ -8,7 +8,7 @@ class WeightedMSE(nn.Module):
 
     def __init__(self) -> None:
         """Initialize the WeightedMSE loss module."""
-        super(WeightedMSE, self).__init__()
+        super().__init__()
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate weighted mean squared error.
@@ -36,7 +36,7 @@ class EffectiveRegionWeightedMSELoss(nn.Module):
 
     def __init__(self) -> None:
         """Initialize the EffectiveRegionWeightedMSELoss module."""
-        super(EffectiveRegionWeightedMSELoss, self).__init__()
+        super().__init__()
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate MSE weighted by effective regions.
@@ -66,7 +66,7 @@ class NonZeroWeightedMSE(nn.Module):
 
     def __init__(self) -> None:
         """Initialize the NonZeroWeightedMSE module."""
-        super(NonZeroWeightedMSE, self).__init__()
+        super().__init__()
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
         """Calculate MSE weighted by non-zero error regions.
@@ -101,7 +101,7 @@ class AmplitudeWeightedMSELoss(nn.Module):
             epsilon: Small value to avoid division by zero.
             a: Exponent for amplitude weighting.
         """
-        super(AmplitudeWeightedMSELoss, self).__init__()
+        super().__init__()
         self.epsilon = epsilon
         self.a = a
 
@@ -135,114 +135,75 @@ class AmplitudeWeightedMSELoss(nn.Module):
         return loss
 
 
-class ConvAlignLoss(nn.Module):
-    """Loss combining ASTF MSE and convolution alignment loss."""
+###################AMSELoss####################
+def _unitary_fft(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    """Unitary FFT (norm='ortho') along `dim`."""
+    return torch.fft.fft(x, dim=dim, norm="ortho")
 
-    def __init__(self, alpha: float = 1.0, crop_len: int = 256) -> None:
-        """Initialize the ConvAlignLoss module.
 
-        Args:
-            alpha: Weight for the convolution alignment loss term.
-            crop_len: Length of waveform segment to compare (center cropped).
-        """
+def _per_bin_psd_unitary(X: torch.Tensor, N: int) -> torch.Tensor:
+    """Per-bin PSD so that sum_k PSD_k = average power per sample."""
+    return (X.abs() ** 2) / float(N)
+
+
+def _per_bin_cos_phase(X: torch.Tensor, Y: torch.Tensor, eps: float) -> torch.Tensor:
+    """cos(Δφ_k) = Re{X Y*} / (|X||Y| + eps), elementwise over the FFT axis.
+
+    Returns:
+        Real tensor in [-1, 1].
+    """
+    num = torch.real(X * torch.conj(Y))
+    den = X.abs() * Y.abs() + eps
+    cphi = num / den
+    return torch.clamp(cphi, -1.0, 1.0)
+
+
+class AMSELoss(nn.Module):
+    """AMSE loss under unitary DFT.
+
+    AMSE = Σ_k [ (√PSD_x - √PSD_y)^2 + 2*max(PSD_x,PSD_y)*(1 - cosΔφ_k) ]
+
+    Args:
+        fft_dim: FFT transform axis (default: -1)
+        reduction: 'mean' | 'sum' | 'none'
+        eps: small constant for numerical stability
+    """
+
+    def __init__(self, fft_dim: int = -1, reduction: str = "mean", eps: float = 1e-12) -> None:
+        """Initialize AMSELoss with FFT configuration."""
         super().__init__()
-        self.alpha = alpha
-        self.crop_len = crop_len
-        self.mse = nn.MSELoss()
+        self.fft_dim = fft_dim
+        self.reduction = reduction
+        self.eps = eps
 
-    def forward(
-        self,
-        pred_astf: torch.Tensor,
-        true_astf: torch.Tensor,
-        egf: torch.Tensor,
-        target_waveform: torch.Tensor,
-        roll: torch.Tensor = None,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calculate the combined ASTF and convolution alignment loss.
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Compute AMSE loss between predicted and target tensors."""
+        if pred.shape != target.shape:
+            raise ValueError("pred and target must have identical shapes")
 
-        Args:
-            pred_astf: Predicted ASTF with shape (B, L).
-            true_astf: True ASTF with shape (B, L).
-            egf: EGF with shape (B, L).
-            target_waveform: Target waveform with shape (B, L3).
-            roll: Precomputed shift (alignment) values with shape (B,) or None.
+        N = pred.size(self.fft_dim)
+        # Unitary FFT
+        X = _unitary_fft(pred, dim=self.fft_dim)
+        Y = _unitary_fft(target, dim=self.fft_dim)
 
-        Returns:
-            A tuple containing:
-                - total_loss: Combined loss value.
-                - Dictionary with individual loss terms ("astf" and "conv").
-        """
-        B, L = pred_astf.shape
-        L_target = target_waveform.shape[1]
+        # Per-bin PSDs
+        PSDx = _per_bin_psd_unitary(X, N)
+        PSDy = _per_bin_psd_unitary(Y, N)
 
-        # 1. Standard MSE loss for ASTF
-        loss_astf = self.mse(pred_astf, true_astf)
+        # cos(Δφ_k)
+        cphi = _per_bin_cos_phase(X, Y, self.eps)
 
-        # 2. Batch convolution: (B,1,L) * (B,1,L) groups=B implements B 1D convolutions
-        pred_astf_ = pred_astf.unsqueeze(1)  # (B, 1, L)
-        egf_ = egf.unsqueeze(1)  # (B, 1, L)
+        # Amplitude term
+        term_amp = (torch.sqrt(PSDx + self.eps) - torch.sqrt(PSDy + self.eps)) ** 2
+        # Phase term
+        term_phase = 2.0 * torch.maximum(PSDx, PSDy) * (1.0 - cphi)
 
-        # Reshape for grouped convolution
-        input_reshaped = pred_astf_.transpose(0, 1)  # (1, B, L)
-        weight_reshaped = egf_  # (B, 1, L)
+        amse_per_example = (term_amp + term_phase).sum(dim=self.fft_dim)
 
-        # Use grouped convolution manually
-        conv_result = F.conv1d(input_reshaped, weight_reshaped, groups=pred_astf.shape[0])
-        conv_result = conv_result.transpose(0, 1).squeeze(1)  # (B, L_out)
-
-        # 3. Compute alignment shifts
-        if roll is None:
-            conv_len = conv_result.shape[1]
-            # Pad target_waveform to match conv_result length for FFT calculation
-            target_padded = F.pad(target_waveform, (0, conv_len - L_target))  # (B, conv_len)
-
-            # Compute cross-correlation using FFT
-            fft_conv = torch.fft.rfft(conv_result, n=2 * conv_len - 1)
-            fft_target = torch.fft.rfft(target_padded, n=2 * conv_len - 1)
-            cc = torch.fft.irfft(fft_conv * torch.conj(fft_target), n=2 * conv_len - 1)  # (B, 2*conv_len -1)
-
-            # Find maximum correlation position to get shift vector (B,)
-            shifts = torch.argmax(cc, dim=1) - (conv_len - 1)
+        # Reduction
+        if self.reduction == "mean":
+            return amse_per_example.mean()
+        elif self.reduction == "sum":
+            return amse_per_example.sum()
         else:
-            shifts = roll.to(torch.long)
-
-        # 4. Roll and center crop the aligned results
-        conv_aligned = self._batch_roll(conv_result, -shifts)  # Negative shift for left shift
-        conv_cropped = self._batch_center_crop(conv_aligned, self.crop_len)
-        target_cropped = self._batch_center_crop(target_waveform, self.crop_len)
-
-        # 5. MSE loss between convolution result and target
-        loss_conv = F.mse_loss(conv_cropped, target_cropped)
-
-        total_loss = loss_astf + self.alpha * loss_conv
-        return total_loss, {"astf": loss_astf, "conv": loss_conv}
-
-    def _batch_center_crop(self, x: torch.Tensor, crop_len: int) -> torch.Tensor:
-        """Center crop batch data along the last dimension.
-
-        Args:
-            x: Input tensor with shape (B, L).
-            crop_len: Length to crop to.
-
-        Returns:
-            Center-cropped tensor with shape (B, crop_len).
-        """
-        L = x.size(1)
-        start = (L - crop_len) // 2
-        return x[:, start : start + crop_len]
-
-    def _batch_roll(self, x: torch.Tensor, shifts: torch.Tensor) -> torch.Tensor:
-        """Roll each element in batch x by corresponding shift value.
-
-        Args:
-            x: Input tensor with shape (B, L).
-            shifts: Shift values with shape (B,).
-
-        Returns:
-            Rolled tensor with same shape as input.
-        """
-        B, L = x.size()
-        rolled = torch.empty_like(x)
-        for i in range(B):
-            rolled[i] = torch.roll(x[i], shifts[i].item())
-        return rolled
+            return amse_per_example

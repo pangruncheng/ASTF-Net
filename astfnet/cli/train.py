@@ -1,12 +1,23 @@
 import argparse
+from typing import Dict
 
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.strategies import DDPStrategy
 
 from astfnet.data_io.datamodule import SeismicDataModule
-from astfnet.models.cnn import PLSimpleCNN
+from astfnet.models.cnn import PLCNN
+
+
+def get_model(config: Dict[str, any]) -> pl.LightningModule | None:
+    """Return the model based on model_name field."""
+    name = config.get("model_name", "simplecnn").lower()
+    if name == "simplecnn" or name == "simplecnn_resbridge":
+        return PLCNN(config)
+    else:
+        raise ValueError(f"Unsupported model_name: {name}")
 
 
 def main() -> None:
@@ -25,7 +36,10 @@ def main() -> None:
     config = dict(config)
     max_epochs = config["max_epochs"]
     datamodule = SeismicDataModule(config)
-    model = PLSimpleCNN(config)
+
+    # Model (auto selected by config)
+    model = get_model(config)
+
     device = config["device"]
     gpus = config["gpus"]
 
@@ -47,7 +61,6 @@ def main() -> None:
         mode=config["callbacks"]["model_checkpoint"]["mode"],
         save_top_k=config["callbacks"]["model_checkpoint"]["save_top_k"],
         filename=config["callbacks"]["model_checkpoint"]["filename"],
-        # verbose=config["callbacks"]["model_checkpoint"]["verbose"],
         save_last=True,  # Save the last checkpoint as well
     )
 
@@ -55,13 +68,12 @@ def main() -> None:
         max_epochs=max_epochs,
         accelerator=device,
         devices=gpus,
-        # strategy=DDPStrategy(find_unused_parameters=False),
+        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
+        use_distributed_sampler=False,
         default_root_dir="outputs",
-        # gradient_clip_val=1.0,
         log_every_n_steps=10,
-        # detect_anomaly=True,
         logger=tb_logger,
-        callbacks=[early_stop_callback, lr_monitor, checkpoint_callback],  # ← Add callbacks here
+        callbacks=[early_stop_callback, lr_monitor, checkpoint_callback],
     )
 
     trainer.fit(model, datamodule=datamodule)

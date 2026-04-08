@@ -4,7 +4,7 @@ import torch
 
 from astfnet.models.loss_fns import (
     AmplitudeWeightedMSELoss,
-    ConvAlignLoss,
+    AMSELoss,
     EffectiveRegionWeightedMSELoss,
     NonZeroWeightedMSE,
     WeightedMSE,
@@ -40,10 +40,18 @@ def load_loss(
     elif loss_name == "mse":
         logger.info("MSELoss is loaded as the loss function.")
         loss_fn = torch.nn.MSELoss()
-    elif loss_name == "convalignLoss":
-        logger.info("ConvAlignLoss is loaded as the loss function.")
-        alpha = config.get("loss_weight")
-        loss_fn = ConvAlignLoss(alpha=alpha, crop_len=256)
+    elif loss_name == "amse":
+        logger.info("AMSELoss (Amplitude and Phase Spectral Loss) is loaded as the loss function.")
+        # Read parameters from config file (provide default values)
+        fft_dim = config.get("loss_fft_dim", -1)
+        reduction = config.get("loss_reduction", "mean")
+        eps = config.get("loss_eps", 1e-6)
+
+        loss_fn = AMSELoss(
+            fft_dim=fft_dim,
+            reduction=reduction,
+            eps=eps,
+        )
     else:
         raise ValueError("loss {} not supported".format(loss_name))
     return loss_fn
