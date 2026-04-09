@@ -1,10 +1,11 @@
 """Neural network models for ASTF-net."""
 
 from .cnn import PLCNN
-from .transformer import CNNTransformer, PLCNNTransformer
+from .transformer import PLCNNTransformer
+from .unet1d import PLUNet1D
 
 __all__ = [
     "PLCNN",
-    "CNNTransformer",
+    "PLUNet1D",
     "PLCNNTransformer",
 ]
