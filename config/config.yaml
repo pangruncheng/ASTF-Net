@@ -8,7 +8,7 @@ val_hdf5_file: "${data_path}/Validation_new_3_pairs_Samezero256_normalize_vr_rat
 test_level_1_hdf5_file: "${test_path}/Test_level1_new_3_pairs_Samezero256_normalize_vr_1.h5"
 test_level_2_hdf5_file: "${test_path}/Test_level2_new_3_pairs_Samezero256_normalize_vr_1.h5"
 test_level_3_hdf5_file: "${test_path}/Test_level3_new_3_pairs_Samezero256_normalize_vr_1.h5"
-batch_size: 8128
+batch_size: 4096
 num_workers: 16
 log_normalize_astf: false # Whether to apply signed log normalization to ASTF data
 log_normalize_input: true # Whether to apply signed log normalization to input waveforms
@@ -29,18 +29,23 @@ augmentations:
 max_augmentations: 1  # Maximum number of augmentations to apply per sample
 
 # Model hyperparameters
-model_name: "simplecnn"       # <--- "simplecnn", "unet1d", "cnnlstm_fusion"
-# dropout_rate: 0.0
+model_name: "transformer"      # <--- "simplecnn", "unet1d", "cnnlstm_fusion"
 in_channels: 2
 output_length: 256
 lr: 0.001
 max_epochs: 700
 device: "gpu"
-gpus: [0,1]  # Use multiple GPUs if available
+gpus: [0]  # Use multiple GPUs if available
 
-# --- Dropout 配置 ---
-# dropout_shallow: 0.0   # encoder 前两层、decoder 后两层
-# dropout_deep: 0.3      # encoder 最深层与对应 decoder 层
+#transformer
+cnn_kernel_size: 10
+cnn_stride: 2
+d_model: 128
+nhead: 8
+num_encoder_layers: 4
+dim_feedforward: 512
+dropout: 0.1
+
 
 # Callbacks configuration
 callbacks:
@@ -64,9 +69,6 @@ callbacks:
     # verbose: true
 
 # Optimization
-loss: "amse"
-loss_fft_dim: -1
-loss_reduction: mean
-loss_eps: 1e-6
+loss: "mse"
 
 output_dir: "output/"
