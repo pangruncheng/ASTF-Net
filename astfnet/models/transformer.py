@@ -1,65 +1,67 @@
 """Transformer model with 1D CNN feature extractor for ASTF-net.
 
 Architecture overview (wav2vec2-inspired CNN feature extractor):
-    1. CNN feature extractor
-           Layer 1 – Conv1d(kernel=cnn_kernel_size, stride=cnn_stride, padding=0):
-                     receptive field = cnn_kernel_size raw samples,
-                     hop size = cnn_stride raw samples. This is the only strided
-                     layer and the sole source of temporal downsampling.
-                     Output length: L' = (L - cnn_kernel_size) // cnn_stride + 1
-           Layers 2-3 – Conv1d(kernel=3, stride=1, padding=1): refine features at
-                     the same temporal resolution (length-preserving).
-           Followed by LayerNorm over the feature dimension.
+    1. CNN feature extractor – extract frame-level features from the raw waveforms.
     2. Positional encoding – inject sequence-position information.
     3. Transformer encoder – capture long-range temporal dependencies via self-attention.
     4. Global average pooling – collapse the frame dimension.
     5. Regression head – map pooled features to the predicted source time function.
 """
 
-import math
-
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 
+MAX_SEQ_LEN = 256
 
-class PositionalEncoding(nn.Module):
-    """Sinusoidal positional encoding as described in 'Attention Is All You Need'.
 
-    Adds fixed position-dependent offsets to the input embeddings so the
-    Transformer can exploit the ordering of the sequence.
+class PEMLP1D(nn.Module):
+    """Learnable positional encoding via a small MLP.
+
+    A two-layer MLP maps each scalar position index (normalised to ``[0, 1]``)
+    to a ``d_model``-dimensional embedding, which is then added to the input.
+    All parameters are learned end-to-end.
     """
 
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 1000) -> None:
-        """Initialize positional encoding.
+    def __init__(
+        self,
+        d_model: int,
+        dropout: float = 0.1,
+        hidden_dim: int = 64,
+        max_len: int = 256,
+    ) -> None:
+        """Initialize the MLP positional encoding.
 
         Args:
-            d_model: Embedding / model dimension.
-            dropout: Dropout rate applied after adding positional encoding.
-            max_len: Maximum supported sequence length.
+            d_model: Embedding dimension (must match the transformer d_model).
+            dropout: Dropout rate applied after adding the positional embedding.
+            hidden_dim: Width of the single hidden layer in the MLP.
+            max_len: Normalisation constant; positions are divided by this value
+                so that inputs to the MLP stay in ``[0, 1]``.
         """
         super().__init__()
+        self.max_len = max_len
         self.dropout = nn.Dropout(p=dropout)
-
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(1)
-        self.register_buffer("pe", pe)
+        self.mlp = nn.Sequential(
+            nn.Linear(1, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, d_model),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Add positional encoding to an input tensor.
+        """Add learned positional embeddings to the input sequence.
 
         Args:
-            x: Input tensor of shape (seq_len, batch_size, d_model).
+            x: Input tensor of shape ``(seq_len, batch_size, d_model)``.
 
         Returns:
-            Tensor of the same shape with positional encoding added.
+            Tensor of the same shape with positional embeddings added.
         """
-        x = x + self.pe[: x.size(0)]
-        return self.dropout(x)
+        seq_len = x.size(0)
+        pos = torch.arange(seq_len, dtype=torch.float32, device=x.device)
+        pos = (pos / (self.max_len - 1)).unsqueeze(1)  # (seq_len, 1)
+        pe = self.mlp(pos).unsqueeze(1)  # (seq_len, 1, d_model)
+        return self.dropout(x + pe)
 
 
 class CNNTransformer(nn.Module):
@@ -106,7 +108,7 @@ class CNNTransformer(nn.Module):
         )
 
         self.feat_layer_norm = nn.LayerNorm(d_model)
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        self.pos_encoder = PEMLP1D(d_model=d_model, dropout=dropout, max_len=MAX_SEQ_LEN)
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -207,7 +209,6 @@ class PLCNNTransformer(pl.LightningModule):
         Returns:
             Training loss tensor.
         """
-        del batch_idx
         y_hat = self(batch["target"], batch["egf"])
         loss = self.loss_fn(y_hat, batch["astf"])
         self.log("train/loss", loss)
@@ -223,7 +224,6 @@ class PLCNNTransformer(pl.LightningModule):
         Returns:
             Validation loss tensor.
         """
-        del batch_idx
         y_hat = self(batch["target"], batch["egf"])
         loss = self.loss_fn(y_hat, batch["astf"])
         self.log("val/loss", loss)
