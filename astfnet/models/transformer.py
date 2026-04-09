@@ -101,11 +101,7 @@ class CNNTransformer(nn.Module):
         self.cnn_stride = cnn_stride
 
         self.cnn_feat_extractor = nn.Sequential(
-            nn.Conv1d(in_channels, 32, kernel_size=cnn_kernel_size, stride=cnn_stride),
-            nn.GELU(),
-            nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.GELU(),
-            nn.Conv1d(64, d_model, kernel_size=3, stride=1, padding=1),
+            nn.Conv1d(in_channels, d_model, kernel_size=cnn_kernel_size, stride=cnn_stride),
             nn.GELU(),
         )
 
