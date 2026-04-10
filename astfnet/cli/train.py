@@ -48,7 +48,7 @@ def main() -> None:
     device = config["device"]
     gpus = config["gpus"]
 
-    tb_logger = TensorBoardLogger(save_dir=config["output_dir"], name="astfnet-training")
+    tb_logger = TensorBoardLogger(save_dir=config["tb_output_dir"], name=config["tb_exp_name"])
 
     # --- Callbacks ---
     early_stop_callback = EarlyStopping(
