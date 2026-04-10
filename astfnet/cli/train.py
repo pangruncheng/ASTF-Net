@@ -5,17 +5,22 @@ import pytorch_lightning as pl
 from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.strategies import DDPStrategy
 
 from astfnet.data_io.datamodule import SeismicDataModule
 from astfnet.models.cnn import PLCNN
+from astfnet.models.transformer import PLCNNTransformer
+from astfnet.models.unet1d import PLUNet1D
 
 
 def get_model(config: Dict[str, any]) -> pl.LightningModule | None:
     """Return the model based on model_name field."""
     name = config.get("model_name", "simplecnn").lower()
-    if name == "simplecnn" or name == "simplecnn_resbridge":
+    if name == "simplecnn" or name == "simplecnn_tunable":
         return PLCNN(config)
+    elif name in ["unet1d", "unet1d_2", "unet1d_2_tunable"]:
+        return PLUNet1D(config)
+    elif name == "transformer":
+        return PLCNNTransformer(config)
     else:
         raise ValueError(f"Unsupported model_name: {name}")
 
@@ -43,7 +48,7 @@ def main() -> None:
     device = config["device"]
     gpus = config["gpus"]
 
-    tb_logger = TensorBoardLogger(save_dir=config["output_dir"], name="astfnet-training")
+    tb_logger = TensorBoardLogger(save_dir=config["tb_output_dir"], name=config["tb_exp_name"])
 
     # --- Callbacks ---
     early_stop_callback = EarlyStopping(
@@ -68,8 +73,6 @@ def main() -> None:
         max_epochs=max_epochs,
         accelerator=device,
         devices=gpus,
-        strategy=DDPStrategy(find_unused_parameters=False, static_graph=True),
-        use_distributed_sampler=False,
         default_root_dir="outputs",
         log_every_n_steps=10,
         logger=tb_logger,
