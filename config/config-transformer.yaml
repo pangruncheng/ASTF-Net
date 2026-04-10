@@ -1,7 +1,7 @@
 # ASTF-net training configuration
 
-tb_output_dir: "/home/mila/g/ge.li/ASTF-net/.sdev/output/"
-tb_exp_name: "transformer_exp3"
+tb_output_dir: ".sdev/output/"
+tb_exp_name: "transformer_dev"
 
 # Dataset and dataloader
 data_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/"
@@ -55,22 +55,22 @@ dropout: 0.2
 # Callbacks configuration
 callbacks:
   early_stopping:
-    monitor: "val/loss"
+    monitor: "val/loss_epoch"
     mode: "min"
     patience: 20
     min_delta: 0.0
     verbose: true
   lr_scheduler:
-    monitor: "val/loss"
+    monitor: "val/loss_epoch"
     mode: "min"
     factor: 0.5
     patience: 10
     # verbose: true
   model_checkpoint:
-    monitor: "val/loss"
+    monitor: "val/loss_epoch"
     mode: "min"
     save_top_k: 1
-    filename: "best-{epoch:02d}-{val_loss:.4f}"
+    filename: "best-{epoch:02d}-{val_loss_epoch:.4f}"
     # verbose: true
 
 # Optimization
