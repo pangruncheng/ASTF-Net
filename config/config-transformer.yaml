@@ -1,8 +1,11 @@
 # ASTF-net training configuration
 
+tb_output_dir: "/home/mila/g/ge.li/ASTF-net/.sdev/output/"
+tb_exp_name: "transformer_exp3"
+
 # Dataset and dataloader
-data_path: "/DATA1/prc_data/dataset/EGFs_new_3_with_ASTFs_vr_ratio2_min0"
-test_path: "/DATA1/prc_data/dataset/test_set"
+data_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/"
+test_path: "test_set/"
 train_hdf5_file: "${data_path}/Train_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
 val_hdf5_file: "${data_path}/Validation_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
 test_level_1_hdf5_file: "${test_path}/Test_level1_new_3_pairs_Samezero256_normalize_vr_1.h5"
@@ -30,21 +33,23 @@ max_augmentations: 1  # Maximum number of augmentations to apply per sample
 
 # Model hyperparameters
 model_name: "transformer"      # <--- "simplecnn", "unet1d", "cnnlstm_fusion"
-in_channels: 2
-output_length: 256
-lr: 0.001
-max_epochs: 700
+lr: 0.0001
+max_epochs: 100
 device: "gpu"
 gpus: [0]  # Use multiple GPUs if available
 
+# data input and output
+in_channels: 2
+output_length: 256
+
 #transformer
-cnn_kernel_size: 10
-cnn_stride: 2
-d_model: 128
-nhead: 8
+cnn_kernel_size: 20
+cnn_stride: 5
+d_model: 256
+nhead: 4
 num_encoder_layers: 4
-dim_feedforward: 512
-dropout: 0.1
+dim_feedforward: 256
+dropout: 0.2
 
 
 # Callbacks configuration
@@ -70,5 +75,3 @@ callbacks:
 
 # Optimization
 loss: "mse"
-
-output_dir: "output/"
