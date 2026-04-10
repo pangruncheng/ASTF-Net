@@ -186,6 +186,7 @@ class PLCNNTransformer(pl.LightningModule):
         )
         self.loss_fn = nn.MSELoss()
         self.lr = config.get("lr", 1e-3)
+        self._val_losses: list[torch.Tensor] = []
 
     def forward(self, target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
         """Predict ASTF from a target waveform and an EGF.
@@ -226,8 +227,14 @@ class PLCNNTransformer(pl.LightningModule):
         """
         y_hat = self(batch["target"], batch["egf"])
         loss = self.loss_fn(y_hat, batch["astf"])
-        self.log("val/loss", loss)
+        self._val_losses.append(loss)
         return loss
+
+    def on_validation_epoch_end(self) -> None:
+        """Log the mean validation loss across all batches at the end of each epoch."""
+        avg_loss = torch.stack(self._val_losses).mean()
+        self.log("val/loss_epoch", avg_loss)
+        self._val_losses.clear()
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure the optimizer used for training.
