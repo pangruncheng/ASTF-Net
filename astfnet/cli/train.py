@@ -59,7 +59,7 @@ def main() -> None:
         verbose=config["callbacks"]["early_stopping"]["verbose"],
     )
 
-    lr_monitor = LearningRateMonitor(logging_interval="epoch")  # Log LR every epoch
+    lr_monitor = LearningRateMonitor(logging_interval="step")  # Log LR every step
 
     checkpoint_callback = ModelCheckpoint(
         monitor=config["callbacks"]["model_checkpoint"]["monitor"],

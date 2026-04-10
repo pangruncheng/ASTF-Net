@@ -187,6 +187,7 @@ class PLCNNTransformer(pl.LightningModule):
         self.loss_fn = nn.MSELoss()
         self.lr = config.get("lr", 1e-3)
         self._val_losses: list[torch.Tensor] = []
+        self._test_losses: list[torch.Tensor] = []
 
     def forward(self, target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
         """Predict ASTF from a target waveform and an EGF.
@@ -235,6 +236,40 @@ class PLCNNTransformer(pl.LightningModule):
         avg_loss = torch.stack(self._val_losses).mean()
         self.log("val/loss_epoch", avg_loss)
         self._val_losses.clear()
+
+    def on_test_start(self) -> None:
+        """Initialize test predictions and ground truth lists."""
+        self.test_preds = []
+        self.test_trues = []
+
+    def test_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
+        """Test step with loss computation and result collection.
+
+        Args:
+            batch: Input batch containing target, egf and astf
+            batch_idx: Index of the current batch
+
+        Returns:
+            Computed loss value
+        """
+        y_hat = self(batch["target"], batch["egf"])
+        self.test_preds.append(y_hat.detach().cpu())
+        self.test_trues.append(batch["astf"].detach().cpu())
+
+        loss = self.loss_fn(y_hat, batch["astf"])
+        self._test_losses.append(loss)
+        return loss
+
+    def on_test_epoch_end(self) -> None:
+        """Log mean test loss and concatenate all test predictions and ground truth values."""
+        avg_loss = torch.stack(self._test_losses).mean()
+        self.log("test/loss_epoch", avg_loss, prog_bar=True)
+        self._test_losses.clear()
+
+        preds = torch.cat(self.test_preds, dim=0)
+        trues = torch.cat(self.test_trues, dim=0)
+        self.test_preds = preds
+        self.test_trues = trues
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
         """Configure the optimizer used for training.
