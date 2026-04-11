@@ -1,14 +1,12 @@
-"""UNet models for ASTF-net."""
+"""UNet backbone models for ASTF-net."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional
 
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing_extensions import Literal
 
-from astfnet.models.optim import load_loss as optim
+from astfnet.models.backbone import register_backbone
 
 
 class DoubleConv1D(nn.Module):
@@ -165,12 +163,13 @@ class OutConv1D(nn.Module):
         return self.softplus(x)
 
 
-class UNet1D_2(nn.Module):
+@register_backbone("unet1d")
+class UNet1D(nn.Module):
     """A 1D U-Net for ASTF prediction from target waveform and EGF."""
 
     def __init__(
         self,
-        n_channels: int = 2,
+        in_channels: int = 2,
         n_classes: int = 1,
         linear: bool = True,
         dropout_shallow: float = 0.1,
@@ -179,18 +178,18 @@ class UNet1D_2(nn.Module):
         """Initialize the 1D U-Net model.
 
         Args:
-            n_channels: Number of input channels, usually 2 for EGF and target waveform.
+            in_channels: Number of input channels, usually 2 for EGF and target waveform.
             n_classes: Number of output channels, usually 1 for ASTF.
             linear: Whether to use linear upsampling.
             dropout_shallow: Dropout probability in shallow layers.
             dropout_deep: Dropout probability in deep layers.
         """
         super().__init__()
-        self.n_channels = n_channels
+        self.n_channels = in_channels
         self.n_classes = n_classes
         self.linear = linear
 
-        self.inc = DoubleConv1D(n_channels, 64, dropout=dropout_shallow)
+        self.inc = DoubleConv1D(in_channels, 64, dropout=dropout_shallow)
         self.down1 = Down1D(64, 128, dropout=dropout_shallow)
         self.down2 = Down1D(128, 256, dropout=dropout_shallow)
         self.down3 = Down1D(256, 512, dropout=dropout_shallow)
@@ -234,253 +233,3 @@ class UNet1D_2(nn.Module):
 
         out = self.outc(x)
         return out.squeeze(1)
-
-
-class PLUNet1D(pl.LightningModule):
-    """PyTorch Lightning module for UNet1D training, validation, and testing."""
-
-    def __init__(self, config: Dict[str, Union[str, float, int, Dict[str, object]]]) -> None:
-        """Initialize the Lightning module.
-
-        Args:
-            config: Configuration dictionary for model, optimizer, and training settings.
-        """
-        super().__init__()
-        in_channels = int(config.get("in_channels", 2))
-        lr = float(config.get("lr", 1e-3))
-
-        self.save_hyperparameters(config)
-        model_type = config.get("model_name", "unet1d")
-
-        if model_type == "unet1d_2":
-            self.model = UNet1D_2(
-                n_channels=in_channels,
-                n_classes=1,
-                linear=True,
-                dropout_shallow=float(config.get("dropout_shallow", 0.1)),
-                dropout_deep=float(config.get("dropout_deep", 0.3)),
-            )
-        else:
-            raise ValueError(f"Unsupported model type: {model_type}")
-
-        self.loss_fn = optim(config)
-        self.lr = lr
-        self.test_preds: List[torch.Tensor] = []
-        self.test_trues: List[torch.Tensor] = []
-
-    def forward(self, target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the wrapped model.
-
-        Args:
-            target_waveform: Input target waveform.
-            egf: Input empirical Green's function.
-
-        Returns:
-            Model prediction.
-        """
-        return self.model(target_waveform, egf)
-
-    def safe_log(
-        self,
-        name: str,
-        value: Union[torch.Tensor, float],
-        *,
-        prog_bar: bool = False,
-        logger: bool = True,
-        on_step: Optional[bool] = None,
-        on_epoch: Optional[bool] = None,
-        reduce_fx: Literal["mean", "sum", "min", "max"] = "mean",
-        sync_dist: bool = False,
-        sync_dist_group: Optional[object] = None,
-        add_dataloader_idx: bool = True,
-        batch_size: Optional[int] = None,
-        metric_attribute: Optional[str] = None,
-        rank_zero_only: bool = False,
-    ) -> None:
-        """Safely log a value only when it is finite.
-
-        Args:
-            name: Name of the metric to log.
-            value: Value to log.
-            prog_bar: Whether to show the metric in the progress bar.
-            logger: Whether to send the metric to the logger.
-            on_step: Whether to log on each step.
-            on_epoch: Whether to log on each epoch.
-            reduce_fx: Reduction function over step values.
-            sync_dist: Whether to synchronize the metric across devices.
-            sync_dist_group: Process group for distributed synchronization.
-            add_dataloader_idx: Whether to append the dataloader index to the metric name.
-            batch_size: Batch size for proper averaging.
-            metric_attribute: Metric attribute name for Lightning internals.
-            rank_zero_only: Whether to log only on rank zero.
-        """
-        tensor_value = value if isinstance(value, torch.Tensor) else torch.tensor(value, device=self.device)
-
-        if torch.isfinite(tensor_value):
-            self.log(
-                name,
-                value,
-                prog_bar=prog_bar,
-                logger=logger,
-                on_step=on_step,
-                on_epoch=on_epoch,
-                reduce_fx=reduce_fx,
-                sync_dist=sync_dist,
-                sync_dist_group=sync_dist_group,
-                add_dataloader_idx=add_dataloader_idx,
-                batch_size=batch_size,
-                metric_attribute=metric_attribute,
-                rank_zero_only=rank_zero_only,
-            )
-        else:
-            self.print(f"[WARNING] {name} is NaN or Inf. Skipped logging.")
-
-    def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Run one training step.
-
-        Args:
-            batch: Input batch containing target, egf, and astf.
-            batch_idx: Index of the current batch.
-
-        Returns:
-            Loss tensor.
-        """
-        del batch_idx
-
-        for key in ["target", "egf", "astf"]:
-            if not torch.isfinite(batch[key]).all():
-                self.print(f"[ERROR] batch[{key}] contains NaN or Inf at step {self.global_step}")
-                self.print(f"  stats: min={batch[key].min()}, max={batch[key].max()}, mean={batch[key].mean()}")
-                return torch.tensor(0.0, requires_grad=True, device=self.device)
-
-        y_hat = self(batch["target"], batch["egf"])
-        if not torch.isfinite(y_hat).all():
-            self.print(f"[ERROR] Model output y_hat contains NaN or Inf at step {self.global_step}")
-            return torch.tensor(0.0, requires_grad=True, device=self.device)
-
-        loss_name = self.hparams.get("loss", "mse")
-        if loss_name == "convalignLoss":
-            loss, parts = self.loss_fn(
-                pred_astf=y_hat,
-                true_astf=batch["astf"],
-                egf=batch["egf"],
-                target_waveform=batch["target"],
-            )
-            self.safe_log("train/loss_astf", parts["astf"], on_epoch=True, prog_bar=False)
-            self.safe_log("train/loss_conv", parts["conv"], on_epoch=True, prog_bar=False)
-        else:
-            loss = self.loss_fn(y_hat, batch["astf"])
-
-        if not torch.isfinite(loss):
-            self.print(f"[ERROR] Loss is NaN at step {self.global_step}")
-            self.print(f"  y_hat stats: min={y_hat.min()}, max={y_hat.max()}, mean={y_hat.mean()}")
-            self.print(
-                f"  astf stats: min={batch['astf'].min()}, max={batch['astf'].max()}, mean={batch['astf'].mean()}"
-            )
-            return torch.tensor(0.0, requires_grad=True, device=self.device)
-
-        self.safe_log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-
-        lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-        self.safe_log("lr-Adam", lr, on_step=False, on_epoch=True, prog_bar=True)
-
-        if self.global_step % 1000 == 0:
-            self.print(f"[step {self.global_step}] loss: {loss.item():.5f}")
-
-        return loss if torch.isfinite(loss) else torch.tensor(0.0, requires_grad=True, device=self.device)
-
-    def validation_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Run one validation step.
-
-        Args:
-            batch: Input batch containing target, egf, and astf.
-            batch_idx: Index of the current batch.
-
-        Returns:
-            Loss tensor.
-        """
-        del batch_idx
-
-        y_hat = self(batch["target"], batch["egf"])
-        loss_name = self.hparams.get("loss", "mse")
-
-        if loss_name == "convalignLoss":
-            loss, parts = self.loss_fn(
-                pred_astf=y_hat,
-                true_astf=batch["astf"],
-                egf=batch["egf"],
-                target_waveform=batch["target"],
-            )
-            self.safe_log("val/loss_astf", parts["astf"], on_epoch=True)
-            self.safe_log("val/loss_conv", parts["conv"], on_epoch=True)
-        else:
-            loss = self.loss_fn(y_hat, batch["astf"])
-
-        self.safe_log("val/loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
-        return loss
-
-    def on_test_start(self) -> None:
-        """Initialize containers for test predictions and labels."""
-        self.test_preds = []
-        self.test_trues = []
-
-    def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Run one test step.
-
-        Args:
-            batch: Input batch containing target, egf, and astf.
-            batch_idx: Index of the current batch.
-
-        Returns:
-            Loss tensor.
-        """
-        del batch_idx
-
-        y_hat = self(batch["target"], batch["egf"])
-        self.test_preds.append(y_hat.detach().cpu())
-        self.test_trues.append(batch["astf"].detach().cpu())
-
-        loss_name = self.hparams.get("loss", "mse")
-        if loss_name == "convalignLoss":
-            loss, _ = self.loss_fn(
-                pred_astf=y_hat,
-                true_astf=batch["astf"],
-                egf=batch["egf"],
-                target_waveform=batch["target"],
-            )
-        else:
-            loss = self.loss_fn(y_hat, batch["astf"])
-
-        self.safe_log("test/loss", loss, prog_bar=True)
-        return loss
-
-    def on_test_epoch_end(self) -> None:
-        """Concatenate predictions and labels collected during testing."""
-        preds = torch.cat(self.test_preds, dim=0)
-        trues = torch.cat(self.test_trues, dim=0)
-        self.test_preds = preds
-        self.test_trues = trues
-
-    def configure_optimizers(self) -> Dict[str, object]:
-        """Configure the optimizer and learning-rate scheduler.
-
-        Returns:
-            Optimizer and scheduler configuration dictionary.
-        """
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams["lr"])
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode=self.hparams["callbacks"]["lr_scheduler"]["mode"],
-            factor=self.hparams["callbacks"]["lr_scheduler"]["factor"],
-            patience=self.hparams["callbacks"]["lr_scheduler"]["patience"],
-        )
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "monitor": self.hparams["callbacks"]["lr_scheduler"]["monitor"],
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }

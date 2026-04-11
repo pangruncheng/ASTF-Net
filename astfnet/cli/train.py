@@ -6,23 +6,9 @@ from omegaconf import OmegaConf
 from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 
+from astfnet.constants import resolve_data_paths
 from astfnet.data_io.datamodule import SeismicDataModule
-from astfnet.models.cnn import PLCNN
-from astfnet.models.transformer import PLCNNTransformer
-from astfnet.models.unet1d import PLUNet1D
-
-
-def get_model(config: Dict[str, any]) -> pl.LightningModule | None:
-    """Return the model based on model_name field."""
-    name = config.get("model_name", "simplecnn").lower()
-    if name == "simplecnn" or name == "simplecnn_tunable":
-        return PLCNN(config)
-    elif name in ["unet1d", "unet1d_2", "unet1d_2_tunable"]:
-        return PLUNet1D(config)
-    elif name == "transformer":
-        return PLCNNTransformer(config)
-    else:
-        raise ValueError(f"Unsupported model_name: {name}")
+from astfnet.models import ASTFModule
 
 
 def main() -> None:
@@ -37,13 +23,21 @@ def main() -> None:
     args = parser.parse_args()
 
     # Load config
-    config = OmegaConf.load(args.config)
-    config = dict(config)
+    config: Dict = dict(OmegaConf.load(args.config))
+
+    # Resolve canonical data file paths from data_path
+    data_path = config.get("data_path")
+    if data_path is None:
+        raise ValueError("Config must specify 'data_path'.")
+    resolved = resolve_data_paths(data_path)
+    config["train_hdf5_file"] = resolved["train_hdf5_file"]
+    config["val_hdf5_file"] = resolved["val_hdf5_file"]
+
     max_epochs = config["max_epochs"]
     datamodule = SeismicDataModule(config)
 
-    # Model (auto selected by config)
-    model = get_model(config)
+    # Model (auto-selected by config["model_name"])
+    model = ASTFModule(config)
 
     device = config["device"]
     gpus = config["gpus"]
