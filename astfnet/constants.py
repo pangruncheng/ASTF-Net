@@ -1,11 +1,4 @@
-"""Common data constants and path resolution for ASTF-net.
-
-Centralises the canonical file-name conventions so that training and test
-configs only need to specify ``data_path`` (the root directory that contains
-the HDF5 files).
-"""
-
-from __future__ import annotations
+"""Common data constants and path resolution for ASTF-net."""
 
 import os
 from typing import Any, Dict, List
