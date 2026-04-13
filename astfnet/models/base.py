@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pytorch_lightning as pl
 import torch
 
 from astfnet.models.backbone import build_backbone
 from astfnet.models.optim import load_loss
+from astfnet.models.optimizer import OptimizerFactory
+from astfnet.models.scheduler import SchedulerFactory
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +20,32 @@ class ASTFModule(pl.LightningModule):
     """Backbone-agnostic Lightning module for ASTF regression.
 
     Args:
-        config: Flat configuration dictionary.  ``model_name`` selects the
-            backbone; ``loss`` selects the loss function.
+        config: Top-level configuration dictionary.  ``model_name`` selects
+            the backbone; ``loss`` selects the loss function.  Optimizer and
+            scheduler settings are read from the ``optimizer`` and
+            ``callbacks.lr_scheduler`` sub-dicts respectively (see
+            :class:`~astfnet.models.optimizer.OptimizerFactory` and
+            :class:`~astfnet.models.scheduler.SchedulerFactory`).
+        optimizer_factory: Pre-built optimizer factory.
+            :meth:`~astfnet.models.optimizer.OptimizerFactory.from_config`.
+        scheduler_factory: Pre-built scheduler factory.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        optimizer_factory: Optional[OptimizerFactory] = None,
+        scheduler_factory: Optional[SchedulerFactory] = None,
+    ) -> None:
         """Initialise the module from a config dict."""
         super().__init__()
         self.save_hyperparameters(config)
 
         self.model = build_backbone(config)
         self.loss_fn = load_loss(config)
-        self.lr = float(config.get("lr", 1e-3))
+
+        self._optimizer_factory = optimizer_factory
+        self._scheduler_factory = scheduler_factory
 
     # ------------------------------------------------------------------
     # Forward
@@ -96,31 +112,24 @@ class ASTFModule(pl.LightningModule):
         self.test_trues = torch.cat(self.test_trues, dim=0)
 
     # ------------------------------------------------------------------
-    # Optimiser
+    # Optimizer
     # ------------------------------------------------------------------
 
     def configure_optimizers(self) -> Dict[str, Any]:
-        """Build Adam + optional ReduceLROnPlateau from config."""
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        """Build optimizer + optional LR scheduler from the stored factories.
 
-        callbacks_cfg = self.hparams.get("callbacks", {})
-        lr_sched_cfg = callbacks_cfg.get("lr_scheduler") if isinstance(callbacks_cfg, dict) else None
+        Both factories are constructed from the config dict passed to
+        :meth:`__init__` unless explicit factory objects were supplied.
+        Supported optimizers and schedulers are listed in
+        :data:`~astfnet.models.optimizer.OPTIMIZER_REGISTRY` and
+        :data:`~astfnet.models.scheduler.SCHEDULER_REGISTRY` respectively.
+        """
+        optimizer = self._optimizer_factory.build(self.parameters())
 
-        if lr_sched_cfg is None:
+        if self._scheduler_factory is None:
             return {"optimizer": optimizer}
 
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            mode=lr_sched_cfg.get("mode", "min"),
-            factor=lr_sched_cfg.get("factor", 0.5),
-            patience=lr_sched_cfg.get("patience", 10),
-        )
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "monitor": lr_sched_cfg.get("monitor", "val/loss_epoch"),
-                "interval": "epoch",
-                "frequency": 1,
-            },
+            "lr_scheduler": self._scheduler_factory.lr_lightning_dict(optimizer),
         }
