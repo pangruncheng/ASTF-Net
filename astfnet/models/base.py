@@ -44,7 +44,11 @@ class ASTFModule(pl.LightningModule):
         self.model = build_backbone(config)
         self.loss_fn = load_loss(config)
 
+        if optimizer_factory is None:
+            optimizer_factory = OptimizerFactory()
+
         self._optimizer_factory = optimizer_factory
+
         self._scheduler_factory = scheduler_factory
 
     # ------------------------------------------------------------------
