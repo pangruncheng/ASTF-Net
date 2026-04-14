@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import torch
 
 from astfnet.models.backbone import build_backbone
-from astfnet.models.optim import load_loss
+from astfnet.models.loss_fns import load_loss
 from astfnet.models.optimizer import OptimizerFactory
 from astfnet.models.scheduler import SchedulerFactory
 
