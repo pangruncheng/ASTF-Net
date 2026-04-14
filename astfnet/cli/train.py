@@ -20,15 +20,19 @@ def main() -> None:
         default="config/config.yaml",
         help="Path to config YAML file",
     )
+    parser.add_argument(
+        "--data",
+        type=str,
+        required=True,
+        help="Path to data directory",
+    )
     args = parser.parse_args()
 
     # Load config
     config: Dict = dict(OmegaConf.load(args.config))
 
-    # Resolve canonical data file paths from data_path
-    data_path = config.get("data_path")
-    if data_path is None:
-        raise ValueError("Config must specify 'data_path'.")
+    # Resolve canonical data file paths from --data CLI argument
+    data_path = args.data
     resolved = resolve_data_paths(data_path)
     config["train_hdf5_file"] = resolved["train_hdf5_file"]
     config["val_hdf5_file"] = resolved["val_hdf5_file"]
