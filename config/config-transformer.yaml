@@ -3,9 +3,7 @@
 tb_output_dir: ".sdev/output/"
 tb_exp_name: "transformer_dev"
 
-# Dataset — only data_path is required; file names are resolved automatically
-data_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/"
-
+# Dataset — data_path must be supplied via --data CLI argument
 batch_size: 4096
 num_workers: 16
 log_normalize_astf: false
@@ -27,11 +25,16 @@ max_augmentations: 1
 
 # Model hyperparameters
 model_name: "transformer"
-lr: 0.0001
 loss: "mse"
 max_epochs: 100
 device: "gpu"
 gpus: [0]
+
+# Optimizer — forwarded to OptimizerFactory.from_config()
+# Supported names: Adam, AdamW
+optimizer:
+  name: Adam
+  lr: 0.0001
 
 # Data input and output
 in_channels: 2
@@ -54,6 +57,12 @@ callbacks:
     patience: 10
     min_delta: 0.0
     verbose: true
+  lr_scheduler:
+    name: ReduceLROnPlateau
+    monitor: "val/loss_epoch"
+    mode: "min"
+    factor: 0.5
+    patience: 10
   model_checkpoint:
     monitor: "val/loss_epoch"
     mode: "min"

@@ -1,11 +1,9 @@
 # ASTF-net training configuration
 
 tb_output_dir: ".sdev/output/"
-tb_exp_name: "cnn_exp1"
+tb_exp_name: "cnn_dev"
 
-# Dataset — only data_path is required; file names are resolved automatically
-data_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/"
-
+# Dataset — data_path must be supplied via --data CLI argument
 batch_size: 4096
 num_workers: 16
 log_normalize_astf: false
@@ -29,10 +27,18 @@ max_augmentations: 1
 model_name: "simplecnn"
 in_channels: 2
 output_length: 256
-lr: 0.001
 max_epochs: 700
 device: "gpu"
 gpus: [0]
+
+
+# Loss
+loss: "mse"
+# Optimizer — forwarded to OptimizerFactory.from_config()
+# Supported names: Adam, AdamW
+optimizer:
+  name: Adam
+  lr: 0.0001
 
 # Callbacks configuration
 callbacks:
@@ -43,6 +49,7 @@ callbacks:
     min_delta: 0.0
     verbose: true
   lr_scheduler:
+    name: ReduceLROnPlateau
     monitor: "val/loss_epoch"
     mode: "min"
     factor: 0.5
@@ -52,6 +59,3 @@ callbacks:
     mode: "min"
     save_top_k: 1
     filename: "best-{epoch:02d}-{val_loss_epoch:.4f}"
-
-# Optimization
-loss: "mse"
