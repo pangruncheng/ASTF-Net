@@ -95,10 +95,20 @@ class ASTFModule(pl.LightningModule):
     # Testing
     # ------------------------------------------------------------------
 
+    def set_test_prefix(self, prefix: str) -> None:
+        """Set a prefix for test metric keys (e.g. ``"test_level1"``).
+
+        When set, ``test_step`` logs metrics as ``{prefix}/loss`` instead of
+        the default ``test/loss``, allowing per-test-set results in TensorBoard.
+        """
+        self._test_prefix = prefix
+
     def on_test_start(self) -> None:
         """Reset prediction buffers."""
         self.test_preds: List[torch.Tensor] = []
         self.test_trues: List[torch.Tensor] = []
+        if not hasattr(self, "_test_prefix"):
+            self._test_prefix = "test"
 
     def test_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Collect predictions and compute test loss."""
@@ -107,7 +117,7 @@ class ASTFModule(pl.LightningModule):
         self.test_trues.append(batch["astf"].detach().cpu())
 
         loss = self.loss_fn(y_hat, batch["astf"])
-        self.log("test/loss", loss, prog_bar=True)
+        self.log(f"{self._test_prefix}/loss", loss, prog_bar=True)
         return loss
 
     def on_test_epoch_end(self) -> None:
