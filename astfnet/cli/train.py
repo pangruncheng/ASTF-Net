@@ -1,4 +1,6 @@
 import argparse
+import logging
+import os
 from typing import Dict
 
 import pytorch_lightning as pl
@@ -9,6 +11,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from astfnet.constants import resolve_data_paths
 from astfnet.data_io.datamodule import SeismicDataModule
 from astfnet.models import ASTFModule
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -26,6 +30,12 @@ def main() -> None:
         required=True,
         help="Path to data directory",
     )
+    parser.add_argument(
+        "--skip-test",
+        action="store_true",
+        default=False,
+        help="Skip test-set evaluation after training",
+    )
     args = parser.parse_args()
 
     # Load config
@@ -34,11 +44,28 @@ def main() -> None:
     # Resolve canonical data file paths from --data CLI argument
     data_path = args.data
     resolved = resolve_data_paths(data_path)
-    config["train_hdf5_file"] = resolved["train_hdf5_file"]
-    config["val_hdf5_file"] = resolved["val_hdf5_file"]
+    train_dhf5_file = resolved["train_hdf5_file"]
+    val_hdf5_file = resolved["val_hdf5_file"]
+    test_hdf5_files = resolved["test_hdf5_files"]
 
     max_epochs = config["max_epochs"]
-    datamodule = SeismicDataModule(config)
+
+    augmentation_params = {
+        "augmentations": config.get("augmentations", config.get("data_augmentations", [])),
+        "max_augmentations": int(config.get("max_augmentations", 0)),
+    }
+
+    datamodule = SeismicDataModule(
+        train_hdf5_file=train_dhf5_file,
+        val_hdf5_file=val_hdf5_file,
+        test_hdf5_files=test_hdf5_files,
+        batch_size=config.get("batch_size", 32),
+        num_workers=config.get("num_workers", 2),
+        log_normalize_astf=config.get("log_normalize_astf", True),
+        log_normalize_input=config.get("log_normalize_input", True),
+        augmentation_params=augmentation_params,
+        model_name=config.get("model_name", ""),
+    )
 
     # Model (auto-selected by config["model_name"])
     model = ASTFModule(config)
@@ -78,6 +105,21 @@ def main() -> None:
     )
 
     trainer.fit(model, datamodule=datamodule)
+
+    # --- Test-set evaluation ---
+    skip_test = args.skip_test
+    if not skip_test:
+        test_files = datamodule.get_test_files()
+        if not test_files:
+            logger.info(" No test files configured – skipping test evaluation.")
+        else:
+            for test_file in test_files:
+                test_name = os.path.splitext(os.path.basename(test_file))[0]
+                logger.info(f"Evaluating on test set: {test_name}")
+
+                model.set_test_prefix(test_name)
+                datamodule.set_test_file(test_file)
+                trainer.test(model, datamodule=datamodule)
 
 
 if __name__ == "__main__":
