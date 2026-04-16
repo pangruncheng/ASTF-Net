@@ -103,13 +103,14 @@ class SeismicDataModule(pl.LightningDataModule):
             stage: One of {"fit", "validate", "test"} or None.
         """
         if stage == "fit" or stage is None:
-            logger.info("Setting up training and validation datasets...")
+            logger.info("Setting up training datasets...")
             self.train_dataset = self.dataset_class(
                 self.train_hdf5_file,
                 augmentation_params=self.augmentation_params,
                 log_normalize_astf=self.log_normalize_astf,
                 log_normalize_input=self.log_normalize_input,
             )
+            logger.info("Setting up validation datasets...")
 
             self.val_dataset = self.dataset_class(
                 self.val_hdf5_file,
