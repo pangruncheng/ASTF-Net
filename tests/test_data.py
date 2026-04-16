@@ -64,7 +64,12 @@ def test_seismic_dataset_without_augmentation(dummy_config: Dict[str, Any]) -> N
 
 
 def test_seismic_datamodule(dummy_config: Dict[str, Any]) -> None:
-    dm = SeismicDataModule(dummy_config)
+    dm = SeismicDataModule(
+        train_hdf5_file=dummy_config["train_hdf5_file"],
+        val_hdf5_file=dummy_config["val_hdf5_file"],
+        batch_size=dummy_config["batch_size"],
+        num_workers=dummy_config["num_workers"],
+    )
     dm.setup("fit")
     train_batch = next(iter(DataLoader(dm.train_dataset, batch_size=2)))
     val_batch = next(iter(DataLoader(dm.val_dataset, batch_size=2)))
