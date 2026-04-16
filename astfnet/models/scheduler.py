@@ -115,11 +115,11 @@ class SchedulerFactory:
         """
         if not isinstance(config, DictConfig):
             config = OmegaConf.create(config)
-        if OmegaConf.select(config, "callbacks.lr_scheduler") is None:
+        if OmegaConf.select(config, "lr_scheduler") is None:
             return None
         args = build_from_config(
             config,
-            path="callbacks.lr_scheduler",
+            path="lr_scheduler",
             own_keys=_LIGHTNING_SCHED_KEYS,
             defaults={"name": "ReduceLROnPlateau", "monitor": "val/loss_epoch", "interval": "epoch", "frequency": 1},
         )

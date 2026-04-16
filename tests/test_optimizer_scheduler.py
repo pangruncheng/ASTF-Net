@@ -217,20 +217,18 @@ class TestSchedulerFactoryLrLightningDict:
 class TestSchedulerFactoryFromConfig:
     def test_returns_none_when_absent(self) -> None:
         assert SchedulerFactory.from_config({}) is None
-        assert SchedulerFactory.from_config({"callbacks": {}}) is None
+        assert SchedulerFactory.from_config({"optimizer": {"name": "Adam", "lr": 1e-3}}) is None
 
     def test_plain_dict_minimal(self) -> None:
         cfg = {
-            "callbacks": {
-                "lr_scheduler": {
-                    "name": "ReduceLROnPlateau",
-                    "monitor": "val/loss_epoch",
-                    "interval": "epoch",
-                    "frequency": 1,
-                    "mode": "min",
-                    "factor": 0.5,
-                    "patience": 10,
-                }
+            "lr_scheduler": {
+                "name": "ReduceLROnPlateau",
+                "monitor": "val/loss_epoch",
+                "interval": "epoch",
+                "frequency": 1,
+                "mode": "min",
+                "factor": 0.5,
+                "patience": 10,
             }
         }
         factory = SchedulerFactory.from_config(cfg)
@@ -246,13 +244,11 @@ class TestSchedulerFactoryFromConfig:
     def test_omegaconf_config(self) -> None:
         cfg = OmegaConf.create(
             {
-                "callbacks": {
-                    "lr_scheduler": {
-                        "name": "ReduceLROnPlateau",
-                        "monitor": "val/loss_epoch",
-                        "interval": "epoch",
-                        "frequency": 1,
-                    }
+                "lr_scheduler": {
+                    "name": "ReduceLROnPlateau",
+                    "monitor": "val/loss_epoch",
+                    "interval": "epoch",
+                    "frequency": 1,
                 }
             }
         )
@@ -261,23 +257,21 @@ class TestSchedulerFactoryFromConfig:
         assert factory.name == "ReduceLROnPlateau"
 
     def test_frequency_is_int(self) -> None:
-        cfg = {"callbacks": {"lr_scheduler": {"name": "ReduceLROnPlateau", "frequency": 2}}}
+        cfg = {"lr_scheduler": {"name": "ReduceLROnPlateau", "frequency": 2}}
         factory = SchedulerFactory.from_config(cfg)
         assert isinstance(factory.frequency, int)
         assert factory.frequency == 2
 
     def test_from_config_build_roundtrip(self, adam_optimizer: torch.optim.Adam) -> None:
         cfg = {
-            "callbacks": {
-                "lr_scheduler": {
-                    "name": "ReduceLROnPlateau",
-                    "monitor": "val/loss_epoch",
-                    "interval": "epoch",
-                    "frequency": 1,
-                    "mode": "min",
-                    "factor": 0.1,
-                    "patience": 3,
-                }
+            "lr_scheduler": {
+                "name": "ReduceLROnPlateau",
+                "monitor": "val/loss_epoch",
+                "interval": "epoch",
+                "frequency": 1,
+                "mode": "min",
+                "factor": 0.1,
+                "patience": 3,
             }
         }
         factory = SchedulerFactory.from_config(cfg)

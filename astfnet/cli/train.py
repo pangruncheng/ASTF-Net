@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 from typing import Dict
 
 import pytorch_lightning as pl
@@ -11,12 +12,15 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from astfnet.constants import resolve_data_paths
 from astfnet.data_io.datamodule import SeismicDataModule
 from astfnet.models import ASTFModule
+from astfnet.models.optimizer import OptimizerFactory
+from astfnet.models.scheduler import SchedulerFactory
 
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
     """Main function to train the ASTF-net model."""
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     parser = argparse.ArgumentParser(description="Train ASTF-net with PyTorch Lightning.")
     parser.add_argument(
         "--config",
@@ -67,8 +71,15 @@ def main() -> None:
         model_name=config.get("model_name", ""),
     )
 
+    # Build optimizer and scheduler factories from config
+    optimizer_factory = OptimizerFactory.from_config(config)
+    scheduler_factory = SchedulerFactory.from_config(config)
+
     # Model (auto-selected by config["model_name"])
-    model = ASTFModule(config)
+    logger.info(
+        f"Instantiating model {config['model_name']} with optimizer {optimizer_factory.name} and scheduler {scheduler_factory.name}..."
+    )
+    model = ASTFModule(config, optimizer_factory=optimizer_factory, scheduler_factory=scheduler_factory)
 
     device = config["device"]
     gpus = config["gpus"]
@@ -104,11 +115,13 @@ def main() -> None:
         callbacks=[early_stop_callback, lr_monitor, checkpoint_callback],
     )
 
+    logger.info("Starting training...")
     trainer.fit(model, datamodule=datamodule)
 
     # --- Test-set evaluation ---
     skip_test = args.skip_test
     if not skip_test:
+        logger.info("Starting evaluation on test sets...")
         test_files = datamodule.get_test_files()
         if not test_files:
             logger.info(" No test files configured – skipping test evaluation.")
