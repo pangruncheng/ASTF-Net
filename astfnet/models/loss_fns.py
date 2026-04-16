@@ -1,6 +1,10 @@
+import logging
+
 import torch
 import torch.fft
 import torch.nn as nn
+
+logger = logging.getLogger(__name__)
 
 
 class WeightedMSE(nn.Module):
@@ -207,3 +211,47 @@ class AMSELoss(nn.Module):
             return amse_per_example.sum()
         else:
             return amse_per_example
+
+
+def load_loss(
+    config: dict,
+) -> torch.nn.Module:  # pragma: no cover
+    """Instantiate the loss.
+
+    Args:
+        config: config dict from the config file
+
+    Returns:
+        loss_fn: The loss for the given model
+    """
+    loss_name = config["loss"]
+    if loss_name == "weighted_mse":
+        logger.info("WeightedMSE is loaded as the loss function.")
+        loss_fn = WeightedMSE()
+    elif loss_name == "effective_region_weighted_mse":
+        logger.info("EffectiveRegionWeightedMSELoss is loaded as the loss function.")
+        loss_fn = EffectiveRegionWeightedMSELoss()
+    elif loss_name == "nonzero_weighted_mse":
+        logger.info("NonZeroWeightedMSE is loaded as the loss function.")
+        loss_fn = NonZeroWeightedMSE()
+    elif loss_name == "amplitude_weighted_mse":
+        logger.info("AmplitudeWeightedMSELoss is loaded as the loss function.")
+        loss_fn = AmplitudeWeightedMSELoss(epsilon=1e-6, a=0.8)
+    elif loss_name == "mse":
+        logger.info("MSELoss is loaded as the loss function.")
+        loss_fn = torch.nn.MSELoss()
+    elif loss_name == "amse":
+        logger.info("AMSELoss (Amplitude and Phase Spectral Loss) is loaded as the loss function.")
+        # Read parameters from config file (provide default values)
+        fft_dim = config.get("loss_fft_dim", -1)
+        reduction = config.get("loss_reduction", "mean")
+        eps = config.get("loss_eps", 1e-6)
+
+        loss_fn = AMSELoss(
+            fft_dim=fft_dim,
+            reduction=reduction,
+            eps=eps,
+        )
+    else:
+        raise ValueError("loss {} not supported".format(loss_name))
+    return loss_fn

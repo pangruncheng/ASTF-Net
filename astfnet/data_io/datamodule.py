@@ -1,7 +1,7 @@
 """DataModule for seismic dataset loading and augmentation in ASTF-net."""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
@@ -17,48 +17,100 @@ logger = logging.getLogger(__name__)
 class SeismicDataModule(pl.LightningDataModule):
     """PyTorch Lightning DataModule for seismic data loading and processing.
 
-    It handles loading of seismic data from HDF5 files and provides DataLoader instances
-    for training, validation, and testing.
+    It handles loading of seismic data from HDF5 files and provides DataLoader
+    instances for training, validation, and testing.
+
+    ``test_hdf5_files`` accepts a single path or a list of paths.  When a
+    single string is provided it is normalised to a one-element list.  Use
+    :meth:`set_test_file` to select which file is active before calling
+    ``trainer.test()``, and :meth:`get_test_files` to retrieve the full list.
     """
 
-    def __init__(self, config: Dict[str, Any]) -> None:
-        """Initialize the SeismicDataModule with configuration."""
+    def __init__(
+        self,
+        train_hdf5_file: str,
+        val_hdf5_file: str,
+        test_hdf5_files: Optional[Union[str, List[str]]] = None,
+        batch_size: int = 32,
+        num_workers: int = 0,
+        log_normalize_astf: bool = True,
+        log_normalize_input: bool = True,
+        augmentation_params: Optional[Dict[str, Any]] = None,
+        model_name: str = "",
+    ) -> None:
+        """Initialize the SeismicDataModule.
+
+        Args:
+            train_hdf5_file: Path to training HDF5 file.
+            val_hdf5_file: Path to validation HDF5 file.
+            test_hdf5_files: Path(s) to test HDF5 file(s). A single string is
+                normalised to a one-element list.
+            batch_size: Batch size for all dataloaders.
+            num_workers: Number of dataloader workers.
+            log_normalize_astf: Apply log-normalisation to ASTF targets.
+            log_normalize_input: Apply log-normalisation to inputs.
+            augmentation_params: Dict with ``"augmentations"`` and
+                ``"max_augmentations"`` keys. ``None`` disables augmentation.
+            model_name: Model name string; if it contains ``"mask"`` the
+                mask-aware dataset class is used.
+        """
         super().__init__()
-        self.config = config
-        self.batch_size = config.get("batch_size", 32)
-        self.num_workers = config.get("num_workers", 2)
-        self.train_hdf5_file = config.get("train_hdf5_file")
-        self.val_hdf5_file = config.get("val_hdf5_file")
-        self.test_hdf5_file = config.get("test_hdf5_file")
-        self.log_normalize_astf = config.get("log_normalize_astf", True)
-        self.log_normalize_input = config.get("log_normalize_input", True)
-        self.augmentation_params = {
-            "augmentations": config.get("augmentations", config.get("data_augmentations", [])),
-            "max_augmentations": int(config.get("max_augmentations", 0)),
+        self.train_hdf5_file = train_hdf5_file
+        self.val_hdf5_file = val_hdf5_file
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.log_normalize_astf = log_normalize_astf
+        self.log_normalize_input = log_normalize_input
+        self.augmentation_params = augmentation_params or {
+            "augmentations": [],
+            "max_augmentations": 0,
         }
 
-        model_name = config.get("model_name", "").lower()
+        # Normalise test files to a list
+        if test_hdf5_files is None:
+            self._test_hdf5_files: List[str] = []
+        elif isinstance(test_hdf5_files, str):
+            self._test_hdf5_files = [test_hdf5_files]
+        else:
+            self._test_hdf5_files = list(test_hdf5_files)
 
-        if "mask" in model_name:
+        # The file used for the *current* test run
+        self._active_test_file: Optional[str] = self._test_hdf5_files[0] if self._test_hdf5_files else None
+
+        if "mask" in model_name.lower():
             self.dataset_class = SeismicDatasetHDF5_mask
         else:
             self.dataset_class = SeismicDatasetHDF5
 
-    def setup(self, stage: Optional[str] = None, test_name: Optional[str] = None) -> None:
+    # ------------------------------------------------------------------
+    # Public helpers for multi-test-set evaluation
+    # ------------------------------------------------------------------
+
+    def get_test_files(self) -> List[str]:
+        """Return the list of all configured test HDF5 file paths."""
+        return list(self._test_hdf5_files)
+
+    def set_test_file(self, test_file: str) -> None:
+        """Select which test HDF5 file to use for the next ``trainer.test()``."""
+        self._active_test_file = test_file
+
+    # ------------------------------------------------------------------
+
+    def setup(self, stage: Optional[str] = None) -> None:
         """Set up training, validation, or test datasets based on the stage.
 
         Args:
             stage: One of {"fit", "validate", "test"} or None.
-            test_name: Optional key for selecting a specific test dataset.
         """
         if stage == "fit" or stage is None:
-            logger.info("Setting up training and validation datasets...")
+            logger.info("Setting up training datasets...")
             self.train_dataset = self.dataset_class(
                 self.train_hdf5_file,
                 augmentation_params=self.augmentation_params,
                 log_normalize_astf=self.log_normalize_astf,
                 log_normalize_input=self.log_normalize_input,
             )
+            logger.info("Setting up validation datasets...")
 
             self.val_dataset = self.dataset_class(
                 self.val_hdf5_file,
@@ -77,23 +129,17 @@ class SeismicDataModule(pl.LightningDataModule):
             )
 
         elif stage == "test":
-            logger.info("Setting up test dataset...")
-            if test_name is None:
-                test_name = self.test_name if hasattr(self, "test_name") else None
-
-            test_file_key = f"{test_name}_hdf5_file" if test_name else "test_hdf5_file"
-            test_file = self.config.get(test_file_key)
-
-            if test_file is None:
-                raise ValueError(f"Cannot find HDF5 path for test_name: '{test_name}' in config.")
-
+            if self._active_test_file is None:
+                raise ValueError(
+                    "No test HDF5 file configured. Pass test_hdf5_files or call set_test_file() before testing."
+                )
+            logger.info("Setting up test dataset from: %s", self._active_test_file)
             self.test_dataset = self.dataset_class(
-                test_file,
+                self._active_test_file,
                 augmentation_params=None,
                 log_normalize_astf=self.log_normalize_astf,
                 log_normalize_input=self.log_normalize_input,
             )
-            self.test_name = test_name
 
     def train_dataloader(self) -> DataLoader:
         """Create and return the training DataLoader."""

@@ -44,6 +44,7 @@ docs = [
 
 [project.scripts]
 astfnet-train="astfnet.cli.train:main"
+astfnet-test="astfnet.cli.test:main"
 astfnet-pred="astfnet.cli.predict:main"
 
 [tool.setuptools]

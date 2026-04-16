@@ -56,7 +56,7 @@ astfnet-pred                # making predictions
 ```
 The entry points can be called directly. For example:
 ```bash
-astfnet-train --config config/config.yaml
+astfnet-train --config config/config-simplecnn.yaml --data /path/to/data/
 ```
 
 More information on the usage and the options available for these entry points can be obtained by calling the --help option. For example:

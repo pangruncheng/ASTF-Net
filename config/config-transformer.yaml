@@ -3,21 +3,13 @@
 tb_output_dir: ".sdev/output/"
 tb_exp_name: "transformer_dev"
 
-# Dataset and dataloader
-data_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/"
-test_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/test_set/"
-train_hdf5_file: "${data_path}/Train_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
-val_hdf5_file: "${data_path}/Validation_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
-test_level_1_hdf5_file: "${test_path}/Test_level1_new_3_pairs_Samezero256_normalize_vr_1.h5"
-test_level_2_hdf5_file: "${test_path}/Test_level2_new_3_pairs_Samezero256_normalize_vr_1.h5"
-test_level_3_hdf5_file: "${test_path}/Test_level3_new_3_pairs_Samezero256_normalize_vr_1.h5"
+# Dataset — data_path must be supplied via --data CLI argument
 batch_size: 4096
 num_workers: 16
-log_normalize_astf: false # Whether to apply signed log normalization to ASTF data
-log_normalize_input: true # Whether to apply signed log normalization to input waveforms
+log_normalize_astf: false
+log_normalize_input: true
 
-# Data augmentations (SpeechBrain style)
-
+# Data augmentations
 augmentations:
   - AddRandomNoise:
       noise_level: 0.1
@@ -29,21 +21,26 @@ augmentations:
   - RandomShift:
       max_shift: 10
 
-max_augmentations: 1  # Maximum number of augmentations to apply per sample
+max_augmentations: 1
 
 # Model hyperparameters
-model_name: "transformer"      # <--- "simplecnn", "unet1d", "cnnlstm_fusion"
-lr: 0.0001
+model_name: "transformer"
 loss: "mse"
 max_epochs: 100
 device: "gpu"
-gpus: [0]  # Use multiple GPUs if available
+gpus: [0]
 
-# data input and output
+# Optimizer — forwarded to OptimizerFactory.from_config()
+# Supported names: Adam, AdamW
+optimizer:
+  name: Adam
+  lr: 0.0001
+
+# Data input and output
 in_channels: 2
 output_length: 256
 
-#transformer
+# Transformer-specific
 cnn_kernel_size: 20
 cnn_stride: 5
 d_model: 256
@@ -51,7 +48,6 @@ nhead: 4
 num_encoder_layers: 4
 dim_feedforward: 256
 dropout: 0.2
-
 
 # Callbacks configuration
 callbacks:
@@ -61,6 +57,12 @@ callbacks:
     patience: 10
     min_delta: 0.0
     verbose: true
+  lr_scheduler:
+    name: ReduceLROnPlateau
+    monitor: "val/loss_epoch"
+    mode: "min"
+    factor: 0.5
+    patience: 10
   model_checkpoint:
     monitor: "val/loss_epoch"
     mode: "min"

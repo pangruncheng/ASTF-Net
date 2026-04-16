@@ -3,7 +3,8 @@ from typing import Any, Dict
 import pytest
 import torch
 
-from astfnet.models.transformer import PEMLP1D, CNNTransformer, PLCNNTransformer
+from astfnet.models.base import ASTFModule
+from astfnet.models.transformer import PEMLP1D, CNNTransformer
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -192,21 +193,25 @@ class TestCNNTransformer:
 # ---------------------------------------------------------------------------
 
 
-class TestPLCNNTransformer:
+class TestASTFModuleTransformer:
     def test_forward_shape(self, default_config: Dict[str, Any], dummy_batch: Dict[str, Any]) -> None:
-        model = PLCNNTransformer(default_config)
+        default_config["loss"] = "mse"
+        model = ASTFModule(default_config)
         out = model(dummy_batch["target"], dummy_batch["egf"])
         assert out.shape == (BATCH_SIZE, OUTPUT_LENGTH)
 
     def test_training_step_returns_loss(self, default_config: Dict[str, Any], dummy_batch: Dict[str, Any]) -> None:
-        model = PLCNNTransformer(default_config)
+        default_config["loss"] = "mse"
+        model = ASTFModule(default_config)
         loss = model.training_step(dummy_batch, 0)
         assert loss.ndim == 0, "Loss must be a scalar"
         assert loss.item() >= 0
         assert loss.requires_grad
 
     def test_validation_step_returns_loss(self, default_config: Dict[str, Any], dummy_batch: Dict[str, Any]) -> None:
-        model = PLCNNTransformer(default_config)
+        default_config["loss"] = "mse"
+        model = ASTFModule(default_config)
+        model.on_validation_start()
         loss = model.validation_step(dummy_batch, 0)
         assert loss.ndim == 0
         assert loss.item() >= 0
@@ -215,26 +220,24 @@ class TestPLCNNTransformer:
         self, default_config: Dict[str, Any], dummy_batch: Dict[str, Any]
     ) -> None:
         """Average val loss across all batches is computed and _val_losses is cleared."""
-        model = PLCNNTransformer(default_config)
+        default_config["loss"] = "mse"
+        model = ASTFModule(default_config)
+        model.on_validation_start()
         for i in range(3):
             model.validation_step(dummy_batch, i)
         assert len(model._val_losses) == 3
         model.on_validation_epoch_end()
         assert len(model._val_losses) == 0, "_val_losses should be cleared after epoch end"
-        # Rerun a step and verify the accumulated average is correct
-        model.validation_step(dummy_batch, 0)
-        model.validation_step(dummy_batch, 1)
-        stored = [l.item() for l in model._val_losses]
-        assert abs(sum(stored) / len(stored) - sum(stored) / len(stored)) < 1e-6
 
     def test_configure_optimizers_returns_adam(self, default_config: Dict[str, Any]) -> None:
-        model = PLCNNTransformer(default_config)
-        opt = model.configure_optimizers()
-        assert isinstance(opt, torch.optim.Adam)
+        default_config["loss"] = "mse"
+        model = ASTFModule(default_config)
+        result = model.configure_optimizers()
+        assert isinstance(result["optimizer"], torch.optim.Adam)
 
     def test_config_defaults_are_applied(self) -> None:
-        """PLCNNTransformer must not crash with a minimal config."""
-        model = PLCNNTransformer({"output_length": OUTPUT_LENGTH})
+        """ASTFModule must not crash with a minimal config."""
+        model = ASTFModule({"output_length": OUTPUT_LENGTH, "model_name": "transformer", "loss": "mse"})
         tw = torch.randn(1, SEQ_LEN)
         egf = torch.randn(1, SEQ_LEN)
         out = model(tw, egf)

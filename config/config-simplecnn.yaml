@@ -1,23 +1,15 @@
 # ASTF-net training configuration
 
 tb_output_dir: ".sdev/output/"
-tb_exp_name: "cnn_exp1"
-# Dataset and dataloader
-data_path: "EGFs_new_3_with_ASTFs_vr_ratio2_min0/"
-test_path: "test_set/"
-# train_hdf5_file: "${data_path}/Validation_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
-train_hdf5_file: "${data_path}/Train_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
-val_hdf5_file: "${data_path}/Validation_new_3_pairs_Samezero256_normalize_vr_ratio2_min0_2.h5"
-test_level_1_hdf5_file: "${test_path}/Test_level1_new_3_pairs_Samezero256_normalize_vr_1.h5"
-test_level_2_hdf5_file: "${test_path}/Test_level2_new_3_pairs_Samezero256_normalize_vr_1.h5"
-test_level_3_hdf5_file: "${test_path}/Test_level3_new_3_pairs_Samezero256_normalize_vr_1.h5"
+tb_exp_name: "cnn_dev"
+
+# Dataset — data_path must be supplied via --data CLI argument
 batch_size: 4096
 num_workers: 16
-log_normalize_astf: false # Whether to apply signed log normalization to ASTF data
-log_normalize_input: true # Whether to apply signed log normalization to input waveforms
+log_normalize_astf: false
+log_normalize_input: true
 
-# Data augmentations (SpeechBrain style)
-
+# Data augmentations
 augmentations:
   - AddRandomNoise:
       noise_level: 0.1
@@ -29,38 +21,41 @@ augmentations:
   - RandomShift:
       max_shift: 10
 
-max_augmentations: 1  # Maximum number of augmentations to apply per sample
+max_augmentations: 1
 
 # Model hyperparameters
-model_name: "simplecnn"      # <--- "simplecnn","simplecnn_tunable", "unet1d", "cnnlstm_fusion"
+model_name: "simplecnn"
 in_channels: 2
 output_length: 256
-lr: 0.001
 max_epochs: 700
 device: "gpu"
-gpus: [0]  # Use multiple GPUs if available
+gpus: [0]
 
+
+# Loss
+loss: "mse"
+# Optimizer — forwarded to OptimizerFactory.from_config()
+# Supported names: Adam, AdamW
+optimizer:
+  name: Adam
+  lr: 0.0001
 
 # Callbacks configuration
 callbacks:
   early_stopping:
-    monitor: "val/loss"
+    monitor: "val/loss_epoch"
     mode: "min"
     patience: 20
     min_delta: 0.0
     verbose: true
   lr_scheduler:
-    monitor: "val/loss"
+    name: ReduceLROnPlateau
+    monitor: "val/loss_epoch"
     mode: "min"
     factor: 0.5
     patience: 10
-    # verbose: true
   model_checkpoint:
-    monitor: "val/loss"
+    monitor: "val/loss_epoch"
     mode: "min"
     save_top_k: 1
-    filename: "best-{epoch:02d}-{val_loss:.4f}"
-    # verbose: true
-
-# Optimization
-loss: "mse"
+    filename: "best-{epoch:02d}-{val_loss_epoch:.4f}"

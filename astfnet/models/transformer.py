@@ -8,9 +8,10 @@ Architecture overview (wav2vec2-inspired CNN feature extractor):
     5. Regression head – map pooled features to the predicted source time function.
 """
 
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+
+from astfnet.models.backbone import register_backbone
 
 MAX_SEQ_LEN = 256
 
@@ -64,6 +65,7 @@ class PEMLP1D(nn.Module):
         return self.dropout(x + pe)
 
 
+@register_backbone("transformer")
 class CNNTransformer(nn.Module):
     """Transformer model with a 1D CNN feature extractor for seismic ASTF inversion.
 
@@ -159,122 +161,3 @@ class CNNTransformer(nn.Module):
         x = self.transformer_encoder(x)
         x = x.mean(dim=0)
         return self.regressor(x)
-
-
-class PLCNNTransformer(pl.LightningModule):
-    """PyTorch Lightning wrapper for :class:`CNNTransformer`."""
-
-    def __init__(self, config: dict) -> None:
-        """Initialize the Lightning wrapper from a configuration dictionary.
-
-        Args:
-            config: Model and optimizer configuration.
-        """
-        super().__init__()
-        self.save_hyperparameters(config)
-
-        self.model = CNNTransformer(
-            in_channels=config.get("in_channels", 2),
-            output_length=config.get("output_length", 501),
-            cnn_kernel_size=config.get("cnn_kernel_size", 10),
-            cnn_stride=config.get("cnn_stride", 2),
-            d_model=config.get("d_model", 128),
-            nhead=config.get("nhead", 8),
-            num_encoder_layers=config.get("num_encoder_layers", 4),
-            dim_feedforward=config.get("dim_feedforward", 512),
-            dropout=config.get("dropout", 0.1),
-        )
-        self.loss_fn = nn.MSELoss()
-        self.lr = config.get("lr", 1e-3)
-        self._val_losses: list[torch.Tensor] = []
-        self._test_losses: list[torch.Tensor] = []
-
-    def forward(self, target_waveform: torch.Tensor, egf: torch.Tensor) -> torch.Tensor:
-        """Predict ASTF from a target waveform and an EGF.
-
-        Args:
-            target_waveform: Tensor of shape (batch_size, seq_len).
-            egf: Tensor of shape (batch_size, seq_len).
-
-        Returns:
-            Predicted ASTF tensor.
-        """
-        return self.model(target_waveform, egf)
-
-    def training_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        """Compute and log training loss for one batch.
-
-        Args:
-            batch: Mini-batch dictionary containing input tensors and labels.
-            batch_idx: Index of the current batch.
-
-        Returns:
-            Training loss tensor.
-        """
-        y_hat = self(batch["target"], batch["egf"])
-        loss = self.loss_fn(y_hat, batch["astf"])
-        self.log("train/loss", loss)
-        return loss
-
-    def validation_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        """Compute and log validation loss for one batch.
-
-        Args:
-            batch: Mini-batch dictionary containing input tensors and labels.
-            batch_idx: Index of the current batch.
-
-        Returns:
-            Validation loss tensor.
-        """
-        y_hat = self(batch["target"], batch["egf"])
-        loss = self.loss_fn(y_hat, batch["astf"])
-        self._val_losses.append(loss)
-        return loss
-
-    def on_validation_epoch_end(self) -> None:
-        """Log the mean validation loss across all batches at the end of each epoch."""
-        avg_loss = torch.stack(self._val_losses).mean()
-        self.log("val/loss_epoch", avg_loss)
-        self._val_losses.clear()
-
-    def on_test_start(self) -> None:
-        """Initialize test predictions and ground truth lists."""
-        self.test_preds = []
-        self.test_trues = []
-
-    def test_step(self, batch: dict, batch_idx: int) -> torch.Tensor:
-        """Test step with loss computation and result collection.
-
-        Args:
-            batch: Input batch containing target, egf and astf
-            batch_idx: Index of the current batch
-
-        Returns:
-            Computed loss value
-        """
-        y_hat = self(batch["target"], batch["egf"])
-        self.test_preds.append(y_hat.detach().cpu())
-        self.test_trues.append(batch["astf"].detach().cpu())
-
-        loss = self.loss_fn(y_hat, batch["astf"])
-        self._test_losses.append(loss)
-        return loss
-
-    def on_test_epoch_end(self) -> None:
-        """Log mean test loss and concatenate all test predictions and ground truth values."""
-        avg_loss = torch.stack(self._test_losses).mean()
-        self.log("test/loss_epoch", avg_loss, prog_bar=True)
-        self._test_losses.clear()
-
-        preds = torch.cat(self.test_preds, dim=0)
-        trues = torch.cat(self.test_trues, dim=0)
-        self.test_preds = preds
-        self.test_trues = trues
-
-    def configure_optimizers(self) -> torch.optim.Optimizer:
-        """Configure the optimizer used for training.
-
-        Returns:
-            Adam optimizer instance.
-        """
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
