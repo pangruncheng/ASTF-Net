@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 
 from astfnet.data_io.dataset import (
     SeismicDatasetHDF5,
-    SeismicDatasetHDF5_mask,
 )
 
 logger = logging.getLogger(__name__)
