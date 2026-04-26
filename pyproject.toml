@@ -38,9 +38,6 @@ dev = [
     "ruff",
     "ty",
 ]
-docs = [
-    "sphinx",
-]
 
 [project.scripts]
 astfnet-train="astfnet.cli.train:main"
