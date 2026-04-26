@@ -15,25 +15,22 @@ jobs:
     - uses: actions/checkout@v4
     - name: Install uv
       uses: astral-sh/setup-uv@v5
-    - name: python-3.10
+    - name: python-3.12
       uses: actions/setup-python@v5
       with:
-        python-version: 3.10.4
+        python-version: "3.12.10"
     - name: install dependencies
       run: |
         uv sync --all-extras
     - name: linting checks
       run: |
         uv run ruff check .
-    - name: install project dependencies
-      run: |
-        uv run pip install -e .
     - name: unit tests
       run: |
-        pytest --cov=astfnet
+        uv run pytest --cov=astfnet
     - name: type checking
       run: |
-        pytype astfnet/
+        uv run ty check astfnet/
     - name: doc-creation-test
       run: |
         ./tests/test_docs/run.sh
