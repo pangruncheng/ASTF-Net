@@ -82,7 +82,7 @@ uv sync
 # Development install — adds pre-commit, pytest, pytest-cov, ruff, and ty
 uv sync --extra dev
 
-# Full install — development and documentation dependencies
+# Full install — core and development dependencies
 uv sync --all-extras
 ```
 
