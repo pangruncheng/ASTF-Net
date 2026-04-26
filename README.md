@@ -11,7 +11,7 @@ The dataset used for ASTF-net is **HiASTF**, available on Hugging Face at
 
 Install the Hugging Face CLI if it is not already available:
 ```bash
-pip install huggingface_hub
+uv add huggingface_hub
 ```
 
 Log in with your Hugging Face account and download the dataset to a local directory:
