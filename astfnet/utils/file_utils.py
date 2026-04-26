@@ -1,19 +1,17 @@
-"""
-File utility functions for ASTF-net.
-"""
+"""File utility functions for ASTF-net."""
 
 import os
-import shutil
 import random
+import shutil
 from typing import List
 
 
 def extract_and_copy_files(
     z_folder: str, t_folder: str, lst_file_paths: List[str], output_folders: List[str]
 ) -> None:
-    """
-    Extract and copy files from Z and T folders according to a 2:1 ratio,
-    ensuring no duplicates and copying to target folders.
+    """Extract and copy files from Z and T folders according to a 2:1 ratio.
+
+    Ensures no duplicates and copies to target folders.
 
     Args:
         z_folder: Path to Z component folder

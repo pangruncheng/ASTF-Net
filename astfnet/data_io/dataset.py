@@ -39,8 +39,7 @@ class SeismicDatasetHDF5(Dataset):
             self.egfs = hf["egfs"][:]
             self.astfs = hf["astfs"][:]
 
-        self._augmentation_params = augmentation_params
-        self.augmenter = None
+        self.augmenter = load_augmenter(augmentation_params or {})
         self.log_normalize_astf = log_normalize_astf
         self.log_normalize_input = log_normalize_input
         self.epsilon = EPSILON_FOR_LOG

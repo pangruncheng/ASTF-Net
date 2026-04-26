@@ -1,6 +1,6 @@
 import torch
 
-from astfnet.models.loss_fns import AMSELoss,WeightedMSE
+from astfnet.models.loss_fns import AMSELoss, WeightedMSE
 
 
 def test_weighted_mse() -> None:

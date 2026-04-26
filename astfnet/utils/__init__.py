@@ -1,16 +1,14 @@
-"""
-Utility functions for ASTF-net.
-"""
+"""Utility functions for ASTF-net."""
 
+from .file_utils import extract_and_copy_files
 from .seismic_utils import (
-    read_lst_file,
     compute_M0,
-    get_window_times,
-    resample_waveform,
     convolve_waveforms,
+    get_window_times,
+    read_lst_file,
+    resample_waveform,
     set_sac_header,
 )
-from .file_utils import extract_and_copy_files
 
 __all__ = [
     "read_lst_file",
