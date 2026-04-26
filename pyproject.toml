@@ -28,13 +28,13 @@ dependencies = [
     "obspy>=1.4.2",
     "tensorboard>=2.19.0",
     "torchaudio>=2.7.0",
-    "pytest-cov>=6.2.1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pre-commit",
     "pytest",
+    "pytest-cov>=6.2.1",
     "ruff",
     "ty",
 ]
