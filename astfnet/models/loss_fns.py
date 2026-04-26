@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import torch
 import torch.fft
@@ -13,7 +14,7 @@ class WeightedMSE(nn.Module):
         """Initialize the WeightedMSE loss module."""
         super().__init__()
 
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Calculate weighted mean squared error.
 
         Args:
@@ -24,7 +25,7 @@ class WeightedMSE(nn.Module):
         Returns:
             Weighted MSE for each batch with shape (batch,).
         """
-        mse = (y_pred - y_true) ** 2  # (batch, seq_len)
+        mse = torch.pow(y_pred - y_true, 2)  # (batch, seq_len)
         mse = mse.mean(dim=1)  # (batch,)
         if weights is not None:
             weighted_mse = weights * mse
@@ -42,7 +43,7 @@ def _unitary_fft(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
 
 def _per_bin_psd_unitary(X: torch.Tensor, N: int) -> torch.Tensor:
     """Per-bin PSD so that sum_k PSD_k = average power per sample."""
-    return (X.abs() ** 2) / float(N)
+    return torch.pow(X.abs(), 2) / float(N)
 
 
 def _per_bin_cos_phase(X: torch.Tensor, Y: torch.Tensor, eps: float) -> torch.Tensor:
@@ -93,7 +94,7 @@ class AMSELoss(nn.Module):
         cphi = _per_bin_cos_phase(X, Y, self.eps)
 
         # Amplitude term
-        term_amp = (torch.sqrt(PSDx + self.eps) - torch.sqrt(PSDy + self.eps)) ** 2
+        term_amp = torch.pow(torch.sqrt(PSDx + self.eps) - torch.sqrt(PSDy + self.eps), 2)
         # Phase term
         term_phase = 2.0 * torch.maximum(PSDx, PSDy) * (1.0 - cphi)
 

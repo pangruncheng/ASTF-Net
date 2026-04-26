@@ -73,7 +73,7 @@ def build_backbone(config: Dict[str, Any]) -> nn.Module:
     return _build_from_config(cls, config)
 
 
-def _build_from_config(cls: type, config: Dict[str, Any]) -> nn.Module:
+def _build_from_config(cls: Callable[..., nn.Module], config: Dict[str, Any]) -> nn.Module:
     """Instantiate *cls* passing only the kwargs it accepts.
 
     Args:

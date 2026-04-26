@@ -1,6 +1,6 @@
 """Dataset classes for ASTF-net."""
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import h5py
 import numpy as np
@@ -20,7 +20,7 @@ class SeismicDatasetHDF5(Dataset):
     def __init__(
         self,
         hdf5_file: str,
-        augmentation_params: Dict[str, Any] = None,
+        augmentation_params: Optional[Dict[str, Any]] = None,
         log_normalize_astf: bool = True,
         log_normalize_input: bool = True,
     ) -> None:

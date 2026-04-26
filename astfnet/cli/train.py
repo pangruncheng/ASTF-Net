@@ -76,8 +76,9 @@ def main() -> None:
     scheduler_factory = SchedulerFactory.from_config(config)
 
     # Model (auto-selected by config["model_name"])
+    scheduler_name = scheduler_factory.name if scheduler_factory is not None else "none"
     logger.info(
-        f"Instantiating model {config['model_name']} with optimizer {optimizer_factory.name} and scheduler {scheduler_factory.name}..."
+        f"Instantiating model {config['model_name']} with optimizer {optimizer_factory.name} and scheduler {scheduler_name}..."
     )
     model = ASTFModule(config, optimizer_factory=optimizer_factory, scheduler_factory=scheduler_factory)
 

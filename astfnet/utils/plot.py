@@ -18,7 +18,7 @@ def compute_tau_c(trace_1d: Union[np.ndarray, torch.Tensor], delta: float) -> fl
     Returns:
         Calculated Tau_c value as float
     """
-    trace_np = trace_1d.numpy() if hasattr(trace_1d, "numpy") else trace_1d
+    trace_np = trace_1d.numpy() if isinstance(trace_1d, torch.Tensor) else trace_1d
     trace_np = np.squeeze(trace_np)
 
     if trace_np.ndim != 1:
@@ -268,8 +268,8 @@ def plot_histograms_and_comparison_actual(
 
     bins = 100
     hist, xedges, yedges = np.histogram2d(actual_durations, predicted_durations, bins=bins)
-    x_idx = np.digitize(actual_durations, xedges) - 1
-    y_idx = np.digitize(predicted_durations, yedges) - 1
+    x_idx = np.asarray(np.digitize(actual_durations, xedges) - 1)
+    y_idx = np.asarray(np.digitize(predicted_durations, yedges) - 1)
     valid_mask = (x_idx >= 0) & (x_idx < bins) & (y_idx >= 0) & (y_idx < bins)
     density = np.zeros_like(actual_durations, dtype=float)
     density[valid_mask] = hist[x_idx[valid_mask], y_idx[valid_mask]]
