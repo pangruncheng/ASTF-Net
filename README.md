@@ -3,6 +3,7 @@
 ASTF-net is an open-source deep learning framework designed for apparent seismic source time function inversion.
 
 # Data
+![ASTF-net Logo](https://github.com/user-attachments/assets/c7c4a6e9-006a-447b-b697-31ed34e42424)
 
 The dataset used for ASTF-net is **HiASTF**, available on Hugging Face at
 [https://huggingface.co/datasets/pangruncheng/HiASTF](https://huggingface.co/datasets/pangruncheng/HiASTF).
@@ -19,8 +20,6 @@ Log in with your Hugging Face account and download the dataset to a local direct
 huggingface-cli login
 huggingface-cli download pangruncheng/HiASTF --repo-type dataset --local-dir /path/to/data/
 ```
-
-![ASTF-net Logo](https://github.com/user-attachments/assets/c7c4a6e9-006a-447b-b697-31ed34e42424)
 
 # Dataset Setup
 
