@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 
 from astfnet.data_io.dataset import (
     SeismicDatasetHDF5,
-    SeismicDatasetHDF5_mask,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,8 +50,7 @@ class SeismicDataModule(pl.LightningDataModule):
             log_normalize_input: Apply log-normalisation to inputs.
             augmentation_params: Dict with ``"augmentations"`` and
                 ``"max_augmentations"`` keys. ``None`` disables augmentation.
-            model_name: Model name string; if it contains ``"mask"`` the
-                mask-aware dataset class is used.
+            model_name: Model name string (reserved for future use).
         """
         super().__init__()
         self.train_hdf5_file = train_hdf5_file
@@ -77,10 +75,7 @@ class SeismicDataModule(pl.LightningDataModule):
         # The file used for the *current* test run
         self._active_test_file: Optional[str] = self._test_hdf5_files[0] if self._test_hdf5_files else None
 
-        if "mask" in model_name.lower():
-            self.dataset_class = SeismicDatasetHDF5_mask
-        else:
-            self.dataset_class = SeismicDatasetHDF5
+        self.dataset_class = SeismicDatasetHDF5
 
     # ------------------------------------------------------------------
     # Public helpers for multi-test-set evaluation

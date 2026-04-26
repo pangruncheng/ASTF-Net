@@ -35,7 +35,8 @@ def build_from_config(
         cfg = OmegaConf.create(cfg)
 
     sub = OmegaConf.select(cfg, path, default=OmegaConf.create({}))
-    flat: Dict[str, Any] = OmegaConf.to_container(sub, resolve=True) or {}
+    _raw = OmegaConf.to_container(sub, resolve=True) or {}
+    flat: Dict[str, Any] = dict(_raw) if isinstance(_raw, dict) else {}
 
     result: Dict[str, Any] = {k: flat.get(k, defaults[k]) for k in own_keys}
     result["kwargs"] = {k: v for k, v in flat.items() if k not in own_keys}

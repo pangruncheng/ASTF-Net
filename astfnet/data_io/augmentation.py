@@ -1,7 +1,7 @@
 """Data augmentation modules for ASTF-net."""
 
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -19,9 +19,9 @@ class BaseWaveformAugmentation(nn.Module, ABC):
         """Initialize the class."""
         super().__init__()
 
+    @abstractmethod
     def forward(self, waveform: torch.Tensor) -> torch.Tensor:
         """Forward method."""
-        ...
 
 
 class AddRandomNoise(BaseWaveformAugmentation):
@@ -202,6 +202,7 @@ if __name__ == "__main__":
         ]
     }
     augmenter = load_augmenter(augmentation_params)
+    assert augmenter is not None, "Expected augmenter to be non-None"
     waveform = torch.randn(1, 100)
     augmented_waveform, _ = augmenter(waveform, lengths=torch.tensor([1.0]))
     print(augmented_waveform.shape)

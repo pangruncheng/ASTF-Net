@@ -1,6 +1,6 @@
 """Transformer model with 1D CNN feature extractor for ASTF-net.
 
-Architecture overview (wav2vec2-inspired CNN feature extractor):
+Architecture overview:
     1. CNN feature extractor – extract frame-level features from the raw waveforms.
     2. Positional encoding – inject sequence-position information.
     3. Transformer encoder – capture long-range temporal dependencies via self-attention.
@@ -13,7 +13,7 @@ import torch.nn as nn
 
 from astfnet.models.backbone import register_backbone
 
-MAX_SEQ_LEN = 256
+MAX_SEQ_LEN = 1000
 
 
 class PEMLP1D(nn.Module):

@@ -1,11 +1,11 @@
 import logging
+from typing import Optional
 
 import torch
 import torch.fft
 import torch.nn as nn
 
 logger = logging.getLogger(__name__)
-
 
 class WeightedMSE(nn.Module):
     """Weighted Mean Squared Error loss module."""
@@ -14,7 +14,7 @@ class WeightedMSE(nn.Module):
         """Initialize the WeightedMSE loss module."""
         super().__init__()
 
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Calculate weighted mean squared error.
 
         Args:
@@ -25,7 +25,7 @@ class WeightedMSE(nn.Module):
         Returns:
             Weighted MSE for each batch with shape (batch,).
         """
-        mse = (y_pred - y_true) ** 2  # (batch, seq_len)
+        mse = torch.pow(y_pred - y_true, 2)  # (batch, seq_len)
         mse = mse.mean(dim=1)  # (batch,)
         if weights is not None:
             weighted_mse = weights * mse
@@ -33,110 +33,6 @@ class WeightedMSE(nn.Module):
         else:
             weighted_mse_batch = mse.mean(dim=0)
         return weighted_mse_batch
-
-
-class EffectiveRegionWeightedMSELoss(nn.Module):
-    """MSE loss weighted by effective regions where either prediction or target is non-zero."""
-
-    def __init__(self) -> None:
-        """Initialize the EffectiveRegionWeightedMSELoss module."""
-        super().__init__()
-
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
-        """Calculate MSE weighted by effective regions.
-
-        Args:
-            y_pred: Predicted values with shape (batch, seq_len).
-            y_true: True values with shape (batch, seq_len).
-            weights: Optional weights for each batch with shape (batch,).
-
-        Returns:
-            Weighted MSE for each batch with shape (batch,).
-        """
-        mask = ((y_pred != 0) | (y_true != 0)).float()  # (batch, seq_len)
-        diff = (y_pred - y_true) ** 2 * mask
-        region_len = mask.sum(dim=1).clamp(min=1)
-        mse = diff.sum(dim=1) / region_len  # (batch,)
-        if weights is not None:
-            weighted_mse = weights * mse
-            weighted_mse_batch = weighted_mse.mean(dim=0)
-        else:
-            weighted_mse_batch = mse.mean(dim=0)
-        return weighted_mse_batch
-
-
-class NonZeroWeightedMSE(nn.Module):
-    """MSE loss weighted by non-zero error regions."""
-
-    def __init__(self) -> None:
-        """Initialize the NonZeroWeightedMSE module."""
-        super().__init__()
-
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
-        """Calculate MSE weighted by non-zero error regions.
-
-        Args:
-            y_pred: Predicted values with shape (batch, seq_len).
-            y_true: True values with shape (batch, seq_len).
-            weights: Optional weights for each batch with shape (batch,).
-
-        Returns:
-            Weighted MSE for each batch with shape (batch,).
-        """
-        diff = (y_pred - y_true) ** 2  # (batch, seq_len)
-        mask = (diff != 0).float()
-        num_nonzero = mask.sum(dim=1).clamp(min=1)  # (batch,)
-        mse = diff.sum(dim=1) / num_nonzero  # (batch,)
-        if weights is not None:
-            weighted_mse = weights * mse
-            weighted_mse_batch = weighted_mse.mean(dim=0)
-        else:
-            weighted_mse_batch = mse.mean(dim=0)
-        return weighted_mse_batch
-
-
-class AmplitudeWeightedMSELoss(nn.Module):
-    """MSE loss weighted by the amplitude of the target signal."""
-
-    def __init__(self, epsilon: float, a: float) -> None:
-        """Initialize the AmplitudeWeightedMSELoss module.
-
-        Args:
-            epsilon: Small value to avoid division by zero.
-            a: Exponent for amplitude weighting.
-        """
-        super().__init__()
-        self.epsilon = epsilon
-        self.a = a
-
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch.Tensor = None) -> torch.Tensor:
-        """Calculate amplitude-weighted MSE.
-
-        Args:
-            y_pred: Predicted values with shape (batch, seq_len).
-            y_true: True values with shape (batch, seq_len).
-            weights: Optional weights for each sample with shape (batch,).
-
-        Returns:
-            Scalar amplitude-weighted MSE loss.
-        """
-        # Compute the amplitude (max absolute value) for each sample
-        amplitude = torch.max(torch.abs(y_true), dim=1, keepdim=True)[0] + self.epsilon  # (batch, 1)
-
-        # Normalize the error by amplitude^a
-        normalized_error = (y_pred - y_true) / amplitude**self.a  # (batch, seq_len)
-
-        # Compute per-sample MSE
-        mse = (normalized_error**2).mean(dim=1)  # (batch,)
-
-        # Apply weights if provided
-        if weights is not None:
-            weighted_mse = weights * mse  # (batch,)
-            loss = weighted_mse.mean()  # scalar
-        else:
-            loss = mse.mean()  # scalar
-
-        return loss
 
 
 ###################AMSELoss####################
@@ -147,7 +43,7 @@ def _unitary_fft(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
 
 def _per_bin_psd_unitary(X: torch.Tensor, N: int) -> torch.Tensor:
     """Per-bin PSD so that sum_k PSD_k = average power per sample."""
-    return (X.abs() ** 2) / float(N)
+    return torch.pow(X.abs(), 2) / float(N)
 
 
 def _per_bin_cos_phase(X: torch.Tensor, Y: torch.Tensor, eps: float) -> torch.Tensor:
@@ -198,7 +94,7 @@ class AMSELoss(nn.Module):
         cphi = _per_bin_cos_phase(X, Y, self.eps)
 
         # Amplitude term
-        term_amp = (torch.sqrt(PSDx + self.eps) - torch.sqrt(PSDy + self.eps)) ** 2
+        term_amp = torch.pow(torch.sqrt(PSDx + self.eps) - torch.sqrt(PSDy + self.eps), 2)
         # Phase term
         term_phase = 2.0 * torch.maximum(PSDx, PSDy) * (1.0 - cphi)
 
@@ -225,19 +121,7 @@ def load_loss(
         loss_fn: The loss for the given model
     """
     loss_name = config["loss"]
-    if loss_name == "weighted_mse":
-        logger.info("WeightedMSE is loaded as the loss function.")
-        loss_fn = WeightedMSE()
-    elif loss_name == "effective_region_weighted_mse":
-        logger.info("EffectiveRegionWeightedMSELoss is loaded as the loss function.")
-        loss_fn = EffectiveRegionWeightedMSELoss()
-    elif loss_name == "nonzero_weighted_mse":
-        logger.info("NonZeroWeightedMSE is loaded as the loss function.")
-        loss_fn = NonZeroWeightedMSE()
-    elif loss_name == "amplitude_weighted_mse":
-        logger.info("AmplitudeWeightedMSELoss is loaded as the loss function.")
-        loss_fn = AmplitudeWeightedMSELoss(epsilon=1e-6, a=0.8)
-    elif loss_name == "mse":
+    if loss_name == "mse":
         logger.info("MSELoss is loaded as the loss function.")
         loss_fn = torch.nn.MSELoss()
     elif loss_name == "amse":
