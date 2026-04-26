@@ -1,9 +1,5 @@
-"""
-Neural network models for ASTF-net.
-"""
+"""Neural network models for ASTF-net."""
 
-from .cnn import PLSimpleCNN
+from .base import ASTFModule
 
-__all__ = [
-    "PLSimpleCNN",
-]
+__all__ = ["ASTFModule"]

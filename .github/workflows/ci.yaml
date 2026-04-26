@@ -1,0 +1,33 @@
+name: CI
+on:
+  # Trigger the workflow on push or pull request,
+  # but only for the main branch
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+    - name: python-3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12.10"
+    - name: install dependencies
+      run: |
+        uv sync --all-extras
+    - name: linting checks
+      run: |
+        uv run ruff check .
+    - name: unit tests
+      run: |
+        uv run pytest --cov=astfnet
+    - name: type checking
+      run: |
+        uv run ty check astfnet/

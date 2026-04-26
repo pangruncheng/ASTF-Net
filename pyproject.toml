@@ -34,16 +34,13 @@ dependencies = [
 dev = [
     "pre-commit",
     "pytest",
+    "pytest-cov>=6.2.1",
     "ruff",
     "ty",
-]
-docs = [
-    "sphinx",
 ]
 
 [project.scripts]
 astfnet-train="astfnet.cli.train:main"
-astfnet-pred="astfnet.cli.predict:main"
 
 [tool.setuptools]
 include-package-data = true

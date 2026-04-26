@@ -1,14 +1,18 @@
-import pytest
-import numpy as np
-import torch
+from pathlib import Path
+from typing import Any, Dict
+
 import h5py
+import numpy as np
+import pytest
+import torch
 from torch.utils.data import DataLoader
-from astfnet.data_io.dataset import SeismicDatasetHDF5
+
 from astfnet.data_io.datamodule import SeismicDataModule
+from astfnet.data_io.dataset import SeismicDatasetHDF5
 
 
 @pytest.fixture
-def dummy_config(tmp_path):
+def dummy_config(tmp_path: Path) -> Dict[str, Any]:
     # Create a dummy HDF5 file for testing
     h5_path = tmp_path / "dummy.h5"
     n, length = 10, 100
@@ -31,7 +35,7 @@ def dummy_config(tmp_path):
     return config
 
 
-def test_seismic_dataset_with_augmentation(dummy_config):
+def test_seismic_dataset_with_augmentation(dummy_config: Dict[str, Any]) -> None:
     dataset = SeismicDatasetHDF5(
         dummy_config["train_hdf5_file"],
         {"data_augmentations": dummy_config["data_augmentations"]},
@@ -47,7 +51,7 @@ def test_seismic_dataset_with_augmentation(dummy_config):
     assert sample["astf"].shape == torch.Size([100])
 
 
-def test_seismic_dataset_without_augmentation(dummy_config):
+def test_seismic_dataset_without_augmentation(dummy_config: Dict[str, Any]) -> None:
     dataset = SeismicDatasetHDF5(dummy_config["val_hdf5_file"])
     sample = dataset[0]
     assert "target" in sample and "egf" in sample and "astf" in sample
@@ -59,8 +63,13 @@ def test_seismic_dataset_without_augmentation(dummy_config):
     assert sample["astf"].shape == torch.Size([100])
 
 
-def test_seismic_datamodule(dummy_config):
-    dm = SeismicDataModule(dummy_config)
+def test_seismic_datamodule(dummy_config: Dict[str, Any]) -> None:
+    dm = SeismicDataModule(
+        train_hdf5_file=dummy_config["train_hdf5_file"],
+        val_hdf5_file=dummy_config["val_hdf5_file"],
+        batch_size=dummy_config["batch_size"],
+        num_workers=dummy_config["num_workers"],
+    )
     dm.setup("fit")
     train_batch = next(iter(DataLoader(dm.train_dataset, batch_size=2)))
     val_batch = next(iter(DataLoader(dm.val_dataset, batch_size=2)))
@@ -71,7 +80,7 @@ def test_seismic_datamodule(dummy_config):
     assert val_batch["target"].shape == torch.Size([2, 100])
 
 
-def test_dataloader(dummy_config):
+def test_dataloader(dummy_config: Dict[str, Any]) -> None:
     dataset = SeismicDatasetHDF5(dummy_config["test_hdf5_file"])
     loader = DataLoader(dataset, batch_size=2)
     batch = next(iter(loader))
