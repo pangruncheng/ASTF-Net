@@ -1,6 +1,4 @@
-"""
-Data processing and loading utilities for ASTF-net.
-"""
+"""Data processing and loading utilities for ASTF-net."""
 
 from .dataset import SeismicDatasetHDF5
 from .preprocessing import preprocess_seismic_data

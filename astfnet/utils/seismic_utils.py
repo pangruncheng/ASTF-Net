@@ -1,18 +1,16 @@
-"""
-Seismic utility functions for ASTF-net.
-"""
+"""Seismic utility functions for ASTF-net."""
 
-from typing import List, Tuple, Union
-import numpy as np
-from obspy.core.trace import Trace
-from obspy.core import UTCDateTime
-from scipy.signal import convolve
 from pathlib import Path
+from typing import Any, List, Tuple, Union
+
+import numpy as np
+from obspy.core import UTCDateTime
+from obspy.core.trace import Trace
+from scipy.signal import convolve
 
 
 def read_lst_file(lst_file: Union[str, Path]) -> List[Path]:
-    """
-    Read LST file and get SAC file paths.
+    """Read LST file and get SAC file paths.
 
     Args:
         lst_file: Path to LST file
@@ -27,8 +25,7 @@ def read_lst_file(lst_file: Union[str, Path]) -> List[Path]:
 
 
 def compute_M0(magnitude: float, is_mw: bool = False) -> float:
-    """
-    Convert magnitude to seismic moment M0.
+    """Convert magnitude to seismic moment M0.
 
     Args:
         magnitude: Earthquake magnitude
@@ -49,10 +46,11 @@ def compute_M0(magnitude: float, is_mw: bool = False) -> float:
 
 
 def get_window_times(
-    Z_hdr, before_sec: float = 0.25, after_sec: float = 1.85
+    Z_hdr: Any,  # noqa: ANN401
+    before_sec: float = 0.25,
+    after_sec: float = 1.85,
 ) -> Tuple[int, int]:
-    """
-    Get time window based on P-wave and S-wave arrival times.
+    """Get time window based on P-wave and S-wave arrival times.
 
     Args:
         Z_hdr: SAC header object
@@ -63,7 +61,6 @@ def get_window_times(
         start_time: Start time index
         end_time: End time index
     """
-
     a = Z_hdr.get("a", None)  # P-wave arrival time
     t0 = Z_hdr.get("t0", None)  # S-wave arrival time
     sampling_interval = Z_hdr.get("delta", None)  # Sampling interval in seconds
@@ -95,8 +92,7 @@ def get_window_times(
 
 
 def resample_waveform(input_waveform: Trace, target_sampling_rate: int = 100) -> Trace:
-    """
-    Resample waveform to target sampling rate if they are not the same.
+    """Resample waveform to target sampling rate if they are not the same.
 
     Args:
         input_waveform: ObsPy trace object
@@ -119,8 +115,7 @@ def resample_waveform(input_waveform: Trace, target_sampling_rate: int = 100) ->
 def convolve_waveforms(
     EGF_waveform: Trace, ASTF_waveform: Trace, start_time: int, end_time: int
 ) -> np.ndarray:
-    """
-    Convolution operation: ASTF divided by M0 then convolved.
+    """Convolution operation: ASTF divided by M0 then convolved.
 
     Args:
         EGF_waveform: EGF ObsPy trace object
@@ -149,9 +144,8 @@ def convolve_waveforms(
     return target_waveform
 
 
-def set_sac_header(trace, ASTF_waveform, EGF_waveform) -> None:
-    """
-    Set SAC header information.
+def set_sac_header(trace: Trace, ASTF_waveform: Trace, EGF_waveform: Trace) -> None:
+    """Set SAC header information.
 
     Args:
         trace: ObsPy trace object to modify

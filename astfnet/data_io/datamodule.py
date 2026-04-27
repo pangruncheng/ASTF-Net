@@ -35,7 +35,6 @@ class SeismicDataModule(pl.LightningDataModule):
         log_normalize_astf: bool = True,
         log_normalize_input: bool = True,
         augmentation_params: Optional[Dict[str, Any]] = None,
-        model_name: str = "",
     ) -> None:
         """Initialize the SeismicDataModule.
 
@@ -50,7 +49,6 @@ class SeismicDataModule(pl.LightningDataModule):
             log_normalize_input: Apply log-normalisation to inputs.
             augmentation_params: Dict with ``"augmentations"`` and
                 ``"max_augmentations"`` keys. ``None`` disables augmentation.
-            model_name: Model name string (reserved for future use).
         """
         super().__init__()
         self.train_hdf5_file = train_hdf5_file
