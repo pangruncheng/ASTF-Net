@@ -1,0 +1,19 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: ASTF-Net
+message: >-
+  A deep learning framework for apparent seismic source time
+  function inversion.
+type: software
+authors:
+  - given-names: Ge
+    family-names: Li
+    email: ge.li2@mail.mcgill.ca
+    affiliation: McGill University
+  - given-names: Runcheng
+    family-names: Pang
+    email: pangruncheng@zju.edu.cn
+    affiliation: Zhejiang University
+license: Apache-2.0
